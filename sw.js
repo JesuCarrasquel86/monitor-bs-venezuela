@@ -3,7 +3,7 @@
    Estrategia: Cache-First para assets, Network-First para APIs
    ============================================================ */
 
-const CACHE_NAME = 'monitor-dolar-v1.3.0';
+const CACHE_NAME = 'monitor-dolar-v1.4.0';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
