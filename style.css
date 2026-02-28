@@ -26,7 +26,7 @@ input[type=number] {
    ============================================= */
 :root,
 [data-theme="dark"] {
-    --bg-page: #0c0e12;
+    --bg-page: #0d1723;
     --bg-card: #161a22;
     --bg-elevated: #1e2330;
     --bg-input: #1e2330;

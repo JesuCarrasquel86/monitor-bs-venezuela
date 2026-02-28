@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            background: #0D1723;
+            color: white;
+            font-family: sans-serif;
+            padding: 2rem;
+        }
+
+        .grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        canvas {
+            display: block;
+            border: 1px dashed #444;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
+
+        .item {
+            text-align: center;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        a {
+            display: block;
+            margin-top: 10px;
+            color: #f0b90b;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        input[type=file] {
+            margin-top: 15px;
+            background: #333;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        h2 {
+            color: #f0b90b;
+        }
+
+        #sampled-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+            border: 1px solid white;
+            margin-left: 10px;
+            background-color: #0D1723;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>🪄 Removedor con Color Exacto (#0D1723)</h2>
+    <p>He configurado el script para usar exactamente el color <strong>#0D1723</strong> que me indicaste. Este es el
+        color que se usará para rellenar las esquinas y el fondo.</p>
+
+    <p>1. <strong>Sube el archivo "i"</strong> (la imagen original).<br>
+        2. La página borrará la basura basándose en tu color: <strong>#0D1723</strong> <span
+            id="sampled-color"></span><br>
+        3. <strong>Descarga</strong> todos los tamaños y reemplázalos en tu carpeta <code>icons/</code>.</p>
+
+    <input type="file" id="upload" accept="image/*">
+    <div class="grid" id="grid"></div>
+
+    <script>
+        const sizes = [16, 32, 72, 96, 120, 128, 144, 152, 180, 192, 512];
+        const grid = document.getElementById('grid');
+
+        // El color exacto que pediste (#0D1723)
+        const bgR = 13;
+        const bgG = 23;
+        const bgB = 35;
+
+        document.getElementById('upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    grid.innerHTML = '';
+
+                    sizes.forEach(size => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = size;
+                        canvas.height = size;
+                        const ctx = canvas.getContext('2d');
+
+                        // Ojo: empezamos pintando TODO el canvas de tu color exacto
+                        ctx.fillStyle = `rgb(${bgR}, ${bgG}, ${bgB})`;
+                        ctx.fillRect(0, 0, size, size);
+
+                        // Dibujamos la imagen original encima
+                        ctx.drawImage(img, 0, 0, size, size);
+
+                        // Obtenemos todos los píxeles
+                        const imgData = ctx.getImageData(0, 0, size, size);
+                        const data = imgData.data;
+
+                        // Analizar píxel a píxel
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+
+                            // Si el píxel es casi blanco/gris sin color o transparente (las esquinas)...
+                            const diff = Math.max(r, g, b) - Math.min(r, g, b);
+
+                            if (a < 255 || (diff < 40 && r > 40)) {
+                                // Forzamos el reemplazo usando tu color #0D1723
+                                data[i] = bgR;      // Red
+                                data[i + 1] = bgG;    // Green
+                                data[i + 2] = bgB;    // Blue
+                                data[i + 3] = 255;    // Alpha sólido
+                            }
+                        }
+
+                        // Aplicar los píxeles limpios al canvas
+                        ctx.putImageData(imgData, 0, 0);
+
+                        // Mostrar preview
+                        const item = document.createElement('div');
+                        item.className = 'item';
+
+                        const preview = document.createElement('canvas');
+                        const psize = Math.min(size, 128);
+                        preview.width = psize;
+                        preview.height = psize;
+                        preview.getContext('2d').drawImage(canvas, 0, 0, psize, psize);
+
+                        item.appendChild(preview);
+
+                        const aLink = document.createElement('a');
+                        aLink.href = canvas.toDataURL('image/png');
+                        aLink.download = `icon-${size}.png`;
+                        aLink.innerText = `⬇ Descargar ${size}px`;
+
+                        item.appendChild(aLink);
+                        grid.appendChild(item);
+                    });
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+
+</html>
