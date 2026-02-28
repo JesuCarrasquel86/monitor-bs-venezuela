@@ -1,6 +1,6 @@
 {
-    "name": "Monitor Bs. Venezuela",
-    "short_name": "Monitor Bs.",
+    "name": "monitor-bs-vz",
+    "short_name": "monitor-bs-vz",
     "description": "Calculadora y monitor de tasas BCV, Euro y Paralelo para Venezuela en tiempo real.",
     "start_url": "/",
     "scope": "/",

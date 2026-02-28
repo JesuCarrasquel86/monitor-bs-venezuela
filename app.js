@@ -103,6 +103,7 @@ const formatUsdt = (val) =>
     }).format(val);
 
 // ── Persistencia ─────────────────────────────────────────────
+console.log('monitor-bs-vz v1.7.0 starting...');
 const STORAGE_KEY = 'monitor-dolar-data';
 const THEME_KEY = 'monitor-dolar-theme';
 
@@ -409,6 +410,18 @@ const registerServiceWorker = async () => {
     if (!('serviceWorker' in navigator)) return;
     try {
         const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+        // Al detectar un nuevo SW, recargar cuando tome el control
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                    console.log('[SW] Nueva versión detectada, recargando...');
+                    window.location.reload();
+                }
+            });
+        });
+
         navigator.serviceWorker.addEventListener('message', (e) => {
             if (e.data?.type === 'SYNC_RATES') fetchData();
         });
