@@ -1,0 +1,12 @@
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Scripts de desarrollo local
+generate-icons.ps1
+
+# Node (por si acaso)
+node_modules/
+.env
+.env.local
