@@ -280,6 +280,37 @@ body {
     flex-shrink: 0;
 }
 
+/* Botón toggle de moneda (reemplaza el prefix estático) */
+.input-prefix-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 0.875rem;
+    height: 48px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border-input);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-family: 'Inter', sans-serif;
+    transition: color 0.15s, background 0.15s;
+    letter-spacing: 0.02em;
+}
+
+.input-prefix-btn:hover {
+    color: var(--accent);
+    background: var(--yellow-bg);
+}
+
+.input-prefix-btn.mode-bs {
+    color: var(--accent);
+    background: var(--yellow-bg);
+}
+
 .calc-input {
     flex: 1;
     min-width: 0;

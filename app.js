@@ -85,7 +85,7 @@ const setupTooltips = () => {
 let data = { bcv: 419.99, binance: 604.78, euro: 495.61, amount: 1 };
 let isEditing = false;
 let isLoading = false;
-let marketLabel = 'Binance'; // 'Binance' | 'Dólar Paralelo'
+let convMode = 'usd';     // 'usd' = entrada USD/EUR → Bs | 'bs' = entrada Bs → USD
 let deferredInstallPrompt = null;
 
 
@@ -169,44 +169,64 @@ const popElement = (id) => {
 
 // ── Actualizar UI ─────────────────────────────────────────────
 const updateUI = () => {
-    const totalBcv = data.bcv * data.amount;
-    const totalBinance = data.binance * data.amount;
-    const totalEuro = data.euro * data.amount;
-    const diffBs = totalBinance - totalBcv;
-    const diffPct = data.bcv > 0 ? (((data.binance - data.bcv) / data.bcv) * 100) : 0;
-    const eqUsdt = data.binance > 0 ? (totalBcv / data.binance) : 0;
-    const eqUsdtEuro = data.binance > 0 ? (totalEuro / data.binance) : 0;
-
     const ph = '--';
     const fmt = (v) => isLoading ? ph : formatBs(v);
 
-    // Totales
-    set('total-bcv', fmt(totalBcv));
-    set('total-euro', fmt(totalEuro));
-    set('total-binance', fmt(totalBinance));
+    if (convMode === 'usd') {
+        // ── USD/EUR → Bs (modo por defecto) ──
+        const totalBcv = data.bcv * data.amount;
+        const totalBinance = data.binance * data.amount;
+        const totalEuro = data.euro * data.amount;
+        const diffBs = totalBinance - totalBcv;
+        const diffPct = data.bcv > 0 ? (((data.binance - data.bcv) / data.bcv) * 100) : 0;
+        const eqUsdt = data.binance > 0 ? totalBcv / data.binance : 0;
+        const eqUsdtEuro = data.binance > 0 ? totalEuro / data.binance : 0;
 
-    // Bases
-    set('base-bcv', formatBs(data.bcv));
-    set('base-euro', formatBs(data.euro));
-    set('base-binance', formatBs(data.binance));
+        set('total-bcv', fmt(totalBcv));
+        set('total-euro', fmt(totalEuro));
+        set('total-binance', fmt(totalBinance));
+        set('base-bcv', formatBs(data.bcv));
+        set('base-euro', formatBs(data.euro));
+        set('base-binance', formatBs(data.binance));
+        set('diff-bs', isLoading ? ph : `+ ${formatBs(diffBs)}`);
+        set('diff-pct', isLoading ? ph : `+${diffPct.toFixed(2)}%`);
+        set('eq-usdt', isLoading ? ph : `${formatUsdt(eqUsdt)} USDT`);
+        set('eq-usdt-euro', isLoading ? ph : `${formatUsdt(eqUsdtEuro)} USDT`);
+        const sub = document.getElementById('sub-amount');
+        if (sub) sub.textContent = `${data.amount} USD`;
 
-    // Análisis
-    set('diff-bs', isLoading ? ph : `+ ${formatBs(diffBs)}`);
-    set('diff-pct', isLoading ? ph : `+${diffPct.toFixed(2)}%`);
-    set('eq-usdt', isLoading ? ph : `${formatUsdt(eqUsdt)} USDT`);
-    set('eq-usdt-euro', isLoading ? ph : `${formatUsdt(eqUsdtEuro)} USDT`);
+    } else {
+        // ── Bs → USD (modo inverso como AirTM/Binance) ──
+        const usdAtBcv = data.bcv > 0 ? data.amount / data.bcv : 0;
+        const usdAtBinance = data.binance > 0 ? data.amount / data.binance : 0;
+        const eurAtBcv = data.euro > 0 ? data.amount / data.euro : 0;
+        const usdtNeeded = data.binance > 0 ? data.amount / data.binance : 0;
+        const diffUsd = usdAtBcv - usdAtBinance;
+        const diffPct = usdAtBinance > 0 ? (diffUsd / usdAtBinance) * 100 : 0;
+
+        set('total-bcv', isLoading ? ph : `${formatUsdt(usdAtBcv)} USD`);
+        set('total-binance', isLoading ? ph : `${formatUsdt(usdAtBinance)} USD`);
+        set('total-euro', isLoading ? ph : `${formatUsdt(eurAtBcv)} EUR`);
+        set('base-bcv', formatBs(data.bcv));
+        set('base-euro', formatBs(data.euro));
+        set('base-binance', formatBs(data.binance));
+        set('diff-bs', isLoading ? ph : `+${formatUsdt(diffUsd)} USD`);
+        set('diff-pct', isLoading ? ph : `+${diffPct.toFixed(2)}%`);
+        set('eq-usdt', isLoading ? ph : `${formatUsdt(usdtNeeded)} USDT`);
+        set('eq-usdt-euro', isLoading ? ph : `${formatUsdt(usdtNeeded)} USDT`);
+        const sub = document.getElementById('sub-amount');
+        if (sub) sub.textContent = `${formatBs(data.amount)} Bs`;
+    }
 
     if (!isLoading) {
         ['total-bcv', 'total-euro', 'total-binance', 'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro']
             .forEach(id => popElement(id));
     }
 
-    // Inputs de edición
     setVal('input-bcv', data.bcv);
     setVal('input-euro', data.euro);
     setVal('input-binance', data.binance);
 
-    // Toggle vista/edición — mantenido por compatibilidad interna
     ['bcv', 'euro', 'binance'].forEach(k => {
         const view = document.getElementById(`view-${k}`);
         const edit = document.getElementById(`edit-${k}`);
@@ -214,20 +234,32 @@ const updateUI = () => {
         if (edit) edit.style.display = 'none';
     });
 
+    // Actualizar prefijo del input según modo
+    const currLabel = document.getElementById('currency-mode-label');
+    const currBtn = document.getElementById('btn-currency-mode');
+    if (currLabel) currLabel.textContent = convMode === 'usd' ? 'USD / EUR' : 'Bs.';
+    currBtn?.classList.toggle('mode-bs', convMode === 'bs');
+
     lucide.createIcons();
 };
+
 
 // ── Helpers DOM ───────────────────────────────────────────────
 const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
 
-// ── Toggle nombre mercado ──────────────────────────────────────────
-const MARKET_NAMES = ['Binance', 'Dólar Paralelo', 'Paralelo'];
-let marketNameIdx = 0;
-const setupMarketToggle = () => {
-    document.getElementById('btn-market-name')?.addEventListener('click', () => {
-        marketNameIdx = (marketNameIdx + 1) % MARKET_NAMES.length;
-        marketLabel = MARKET_NAMES[marketNameIdx];
+// ── Toggle nombre mercado ── (conservado por compatibilidad, sin botón en UI)
+const setupMarketToggle = () => { };
+
+// ── Toggle modo de divisa (USD/EUR ⇔ Bs.) ─────────────────────
+const setupCurrencyModeToggle = () => {
+    document.getElementById('btn-currency-mode')?.addEventListener('click', () => {
+        convMode = convMode === 'usd' ? 'bs' : 'usd';
+        // Reset input a 1 al cambiar modo
+        data.amount = 1;
+        const input = document.getElementById('input-amount');
+        if (input) { input.value = 1; input.select(); }
+        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
         updateUI();
     });
 };
@@ -439,7 +471,7 @@ const init = () => {
     setupEventListeners();
     setupInstallBanner();
     setupTooltips();
-    setupMarketToggle();
+    setupCurrencyModeToggle();
     setupCopyBtn();
     registerServiceWorker();
 
