@@ -310,17 +310,30 @@ body {
     padding: 1rem 1.125rem;
 }
 
-.usdt-label {
+/* ── USDT Hero layout ── */
+.usdt-hero-content {
+    width: 100%;
+}
+
+.usdt-top-row {
     display: flex;
     align-items: center;
     gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.usdt-label-text {
     font-size: 10px;
     font-weight: 600;
     color: var(--yellow);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    margin-bottom: 6px;
     opacity: 0.85;
+}
+
+[data-theme="light"] .usdt-label-text {
+    color: #b38700;
 }
 
 .pulse-dot {
@@ -346,8 +359,47 @@ body {
     }
 }
 
+[data-theme="light"] .pulse-dot {
+    background: #b38700;
+}
+
+/* Selector nombre mercado */
+.market-name-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(240, 185, 11, 0.15);
+    border: 1px solid rgba(240, 185, 11, 0.3);
+    border-radius: 20px;
+    padding: 2px 8px 2px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--yellow);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    transition: background 0.15s;
+    font-family: 'Inter', sans-serif;
+}
+
+.market-name-btn:hover {
+    background: rgba(240, 185, 11, 0.25);
+}
+
+[data-theme="light"] .market-name-btn {
+    color: #b38700;
+}
+
+/* Fila valor + copiar */
+.usdt-value-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
 .usdt-value {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 800;
     color: var(--yellow);
     letter-spacing: -0.03em;
@@ -358,30 +410,58 @@ body {
     color: #b38700;
 }
 
-[data-theme="light"] .usdt-label {
-    color: #b38700;
-}
-
-[data-theme="light"] .pulse-dot {
-    background: #b38700;
-}
-
-.usdt-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--bg-card);
-    border: 1px solid rgba(240, 185, 11, 0.2);
+/* Botón copiar */
+.copy-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(240, 185, 11, 0.12);
+    border: 1px solid rgba(240, 185, 11, 0.2);
     color: var(--yellow);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
     flex-shrink: 0;
 }
 
-[data-theme="light"] .usdt-icon {
+.copy-btn:hover {
+    background: rgba(240, 185, 11, 0.25);
+}
+
+.copy-btn:active {
+    transform: scale(0.9);
+}
+
+.copy-btn.copied {
+    background: rgba(46, 204, 113, 0.2);
+    border-color: rgba(46, 204, 113, 0.4);
+    color: #2ecc71;
+}
+
+[data-theme="light"] .copy-btn {
     color: #b38700;
 }
+
+/* Sub-texto explicativo */
+.usdt-sub {
+    font-size: 11px;
+    color: var(--yellow);
+    opacity: 0.5;
+    line-height: 1.45;
+    font-weight: 500;
+}
+
+.usdt-sub strong {
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+[data-theme="light"] .usdt-sub {
+    color: #b38700;
+}
+
 
 /* ═══════════════════════════════════════
    RATES SECTION

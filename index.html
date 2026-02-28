@@ -111,23 +111,38 @@
 
             <!-- Resultado estrella -->
             <div class="usdt-hero">
-                <div>
-                    <div class="usdt-label-row">
-                        <p class="usdt-label">
-                            <span class="pulse-dot"></span>
-                            Debes sacar en Binance
-                        </p>
+                <div class="usdt-hero-content">
+                    <!-- Fila superior: etiqueta + selector de nombre + help -->
+                    <div class="usdt-top-row">
+                        <span class="pulse-dot"></span>
+                        <span class="usdt-label-text">Vende en el</span>
+                        <!-- Selector: Binance / Dólar Paralelo -->
+                        <button id="btn-market-name" class="market-name-btn">
+                            <span id="market-name-text">Binance</span>
+                            <i data-lucide="chevrons-up-down" class="w-3 h-3 opacity-60"></i>
+                        </button>
                         <button class="help-btn help-btn-yellow" data-tip="usdt">
                             <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
-                    <p class="usdt-value" id="eq-usdt">--</p>
-                </div>
-                <div class="usdt-icon">
-                    <i data-lucide="wallet" class="w-5 h-5"></i>
+
+                    <!-- Valor grande + copiar -->
+                    <div class="usdt-value-row">
+                        <p class="usdt-value" id="eq-usdt">--</p>
+                        <button id="btn-copy-usdt" class="copy-btn" title="Copiar">
+                            <i data-lucide="copy" class="w-4 h-4" id="icon-copy"></i>
+                        </button>
+                    </div>
+
+                    <!-- Sub-explicación -->
+                    <p class="usdt-sub">
+                        Para cubrir <strong id="sub-amount">1 USD</strong> a tasa BCV vendiendo USDT al precio del
+                        paralelo
+                    </p>
                 </div>
             </div>
         </div>
+
 
         <!-- Grid de tasas -->
         <div class="rates-section">

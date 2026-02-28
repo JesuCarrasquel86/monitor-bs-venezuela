@@ -85,7 +85,9 @@ const setupTooltips = () => {
 let data = { bcv: 419.99, binance: 604.78, euro: 495.61, amount: 1 };
 let isEditing = false;
 let isLoading = false;
+let marketLabel = 'Binance'; // 'Binance' | 'Dólar Paralelo'
 let deferredInstallPrompt = null;
+
 
 // ── Formato número venezolano ─────────────────────────────────
 const formatBs = (val) =>
@@ -218,6 +220,37 @@ const updateUI = () => {
 // ── Helpers DOM ───────────────────────────────────────────────
 const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+
+// ── Toggle nombre mercado ──────────────────────────────────────────
+const MARKET_NAMES = ['Binance', 'Dólar Paralelo', 'Paralelo'];
+let marketNameIdx = 0;
+const setupMarketToggle = () => {
+    document.getElementById('btn-market-name')?.addEventListener('click', () => {
+        marketNameIdx = (marketNameIdx + 1) % MARKET_NAMES.length;
+        marketLabel = MARKET_NAMES[marketNameIdx];
+        updateUI();
+    });
+};
+
+// ── Botón copiar USDT ──────────────────────────────────────────
+const setupCopyBtn = () => {
+    document.getElementById('btn-copy-usdt')?.addEventListener('click', () => {
+        const val = document.getElementById('eq-usdt')?.textContent;
+        if (!val || val === '--') return;
+        navigator.clipboard.writeText(val).then(() => {
+            const btn = document.getElementById('btn-copy-usdt');
+            const icon = document.getElementById('icon-copy');
+            btn?.classList.add('copied');
+            icon?.setAttribute('data-lucide', 'check');
+            lucide.createIcons();
+            setTimeout(() => {
+                btn?.classList.remove('copied');
+                icon?.setAttribute('data-lucide', 'copy');
+                lucide.createIcons();
+            }, 1800);
+        }).catch(() => { });
+    });
+};
 
 // ── Error ─────────────────────────────────────────────────────
 const showError = (msg) => {
@@ -406,6 +439,8 @@ const init = () => {
     setupEventListeners();
     setupInstallBanner();
     setupTooltips();
+    setupMarketToggle();
+    setupCopyBtn();
     registerServiceWorker();
 
     if (loadFromStorage()) {
