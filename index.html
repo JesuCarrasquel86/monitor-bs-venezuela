@@ -19,7 +19,7 @@
         rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=1.7">
+    <link rel="stylesheet" href="style.css?v=1.8">
 </head>
 
 <body>
@@ -144,7 +144,17 @@
 
         <!-- Grid de tasas -->
         <div class="rates-section">
-            <p class="section-label mb-3">Tasas del día</p>
+            <!-- Cabecera de tasas con fecha y navegación de días -->
+            <div class="rates-header">
+                <div class="rates-title-row">
+                    <p class="section-label">Tasas</p>
+                    <span class="rate-date-badge" id="rate-date-badge">hoy</span>
+                </div>
+                <!-- Selector de días (últimos 7 días) -->
+                <div class="days-bar" id="days-bar">
+                    <!-- Se genera dinámicamente en app.js -->
+                </div>
+            </div>
             <div class="rates-grid">
 
                 <!-- BCV -->
@@ -240,7 +250,7 @@
 
     </div>
 
-    <script src="app.js?v=1.7"></script>
+    <script src="app.js?v=1.8"></script>
 </body>
 
 </html>

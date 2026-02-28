@@ -503,6 +503,123 @@ body {
     border-top: 1px solid var(--border);
 }
 
+/* ── Rates header: title row + days bar ── */
+.rates-header {
+    margin-bottom: 0.875rem;
+}
+
+.rates-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0.625rem;
+}
+
+.rates-title-row .section-label {
+    margin-bottom: 0;
+}
+
+.rate-date-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 8px;
+    letter-spacing: 0.04em;
+    transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.rate-date-badge.is-historical {
+    color: var(--accent);
+    background: var(--yellow-bg);
+    border-color: rgba(240, 185, 11, 0.3);
+}
+
+/* ── Days bar ── */
+.days-bar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 2px;
+}
+
+.days-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.day-pill {
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 11px;
+    border-radius: 20px;
+    border: 1px solid var(--border-input);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.day-pill:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.day-pill.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(240, 185, 11, 0.3);
+}
+
+.day-pill:active {
+    transform: scale(0.95);
+}
+
+.day-pill .pill-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.day-pill.today-pill {
+    border-color: rgba(46, 204, 113, 0.4);
+    color: var(--green);
+}
+
+.day-pill.today-pill:hover,
+.day-pill.today-pill.active {
+    background: rgba(46, 204, 113, 0.15);
+    border-color: var(--green);
+    color: var(--green);
+    box-shadow: 0 2px 8px rgba(46, 204, 113, 0.25);
+}
+
+.day-pill.weekend-pill {
+    opacity: 0.6;
+}
+
+/* Loading state for historical day */
+.rates-grid.history-loading .rate-value,
+.rates-grid.history-loading .rate-base span {
+    opacity: 0.4;
+}
+
 .rates-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;

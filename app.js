@@ -87,6 +87,9 @@ let isEditing = false;
 let isLoading = false;
 let convMode = 'usd';     // 'usd' = entrada USD/EUR → Bs | 'bs' = entrada Bs → USD
 let deferredInstallPrompt = null;
+let historyCache = {};    // { 'YYYY-MM-DD': { bcv, binance, euro } }
+let selectedDayKey = null; // null = hoy (live)
+let rateDate = null;       // fecha de la tasa actual (Date object o null)
 
 
 // ── Formato número venezolano ─────────────────────────────────
@@ -103,9 +106,10 @@ const formatUsdt = (val) =>
     }).format(val);
 
 // ── Persistencia ─────────────────────────────────────────────
-console.log('monitor-bs-vz v1.7.0 starting...');
+console.log('monitor-bs-vz v1.8.0 starting...');
 const STORAGE_KEY = 'monitor-dolar-data';
 const THEME_KEY = 'monitor-dolar-theme';
+const HISTORY_KEY = 'monitor-dolar-history'; // historial diario: { 'YYYY-MM-DD': { bcv, binance, euro } }
 
 const saveToStorage = () => {
     try {
@@ -127,6 +131,42 @@ const loadFromStorage = () => {
         }
     } catch (e) { }
     return false;
+};
+
+// ── Guardar tasa del día en historial ─────────────────────────────────
+const saveHistoryEntry = (dateKey, entry) => {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        const history = raw ? JSON.parse(raw) : {};
+        history[dateKey] = { ...entry, savedAt: new Date().toISOString() };
+        // Mantener solo los últimos 14 días para no llenar localStorage
+        const keys = Object.keys(history).sort().slice(-14);
+        const trimmed = {};
+        keys.forEach(k => { trimmed[k] = history[k]; });
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+    } catch (e) { }
+};
+
+const loadHistoryEntry = (dateKey) => {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return null;
+        const history = JSON.parse(raw);
+        return history[dateKey] || null;
+    } catch (e) { return null; }
+};
+
+const loadAllHistory = () => {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return;
+        const history = JSON.parse(raw);
+        Object.entries(history).forEach(([k, v]) => {
+            if (v.bcv && v.binance && v.euro) {
+                historyCache[k] = { bcv: v.bcv, binance: v.binance, euro: v.euro };
+            }
+        });
+    } catch (e) { }
 };
 
 // ── Dark / Light Mode ─────────────────────────────────────────
@@ -294,6 +334,48 @@ const showError = (msg) => {
     wrapper.style.display = msg ? 'flex' : 'none';
 };
 
+// ── Capitalizar primera letra ──────────────────────────────────────
+const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+// ── Helpers de fecha ──────────────────────────────────────────────
+const toDateKey = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+// ── Mostrar fecha de la tasa en el badge ──────────────────────────
+const updateRateDateBadge = () => {
+    const badge = document.getElementById('rate-date-badge');
+    if (!badge) return;
+
+    if (selectedDayKey) {
+        const d = new Date(selectedDayKey + 'T12:00:00');
+        const dayName = d.toLocaleDateString('es-VE', { weekday: 'short' });
+        const dayMonth = d.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' });
+        badge.textContent = `${cap(dayName)} ${dayMonth}`;
+        badge.classList.add('is-historical');
+    } else if (rateDate) {
+        const today = new Date();
+        const todayKey = toDateKey(today);
+        const rateDateKey = toDateKey(rateDate);
+        if (rateDateKey === todayKey) {
+            badge.textContent = 'Hoy';
+            badge.classList.remove('is-historical');
+        } else {
+            // Fin de semana: la tasa es del viernes
+            const dayName = rateDate.toLocaleDateString('es-VE', { weekday: 'short' });
+            const dayMonth = rateDate.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' });
+            badge.textContent = `${cap(dayName)} ${dayMonth}`;
+            badge.classList.add('is-historical');
+        }
+    } else {
+        badge.textContent = isLoading ? '...' : 'Hoy';
+        badge.classList.remove('is-historical');
+    }
+};
+
 // ── Estado de carga ───────────────────────────────────────────
 const setLoadState = (state) => {
     isLoading = state;
@@ -320,9 +402,107 @@ const setLoadState = (state) => {
         }
         saveToStorage();
     }
+    updateRateDateBadge();
     lucide.createIcons();
     updateUI();
 };
+
+const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6;
+
+// Genera los últimos N días (incluyendo hoy)
+const buildDays = (n = 7) => {
+    const days = [];
+    const now = new Date();
+    for (let i = 0; i < n; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        days.push(d);
+    }
+    return days; // [hoy, ayer, anteayer, ...]
+};
+
+// ── Construir barra de días ──────────────────────────────────
+const buildDaysBar = () => {
+    const bar = document.getElementById('days-bar');
+    if (!bar) return;
+    const days = buildDays(7);
+    const todayKey = toDateKey(new Date());
+
+    // Determinar qué día tiene la tasa actual (viene de la API)
+    // Si es fin de semana, el dato de 'hoy' en la API puede ser el viernes
+    const activeLiveKey = rateDate ? toDateKey(rateDate) : todayKey;
+
+    bar.innerHTML = '';
+    days.forEach((d, idx) => {
+        const key = toDateKey(d);
+        const isToday = key === todayKey;
+        const isWknd = isWeekend(d);
+        const isCurrent = (selectedDayKey === null && key === activeLiveKey) ||
+            selectedDayKey === key;
+
+        const btn = document.createElement('button');
+        btn.className = 'day-pill';
+        if (isToday) btn.classList.add('today-pill');
+        if (isWknd) btn.classList.add('weekend-pill');
+        if (isCurrent) btn.classList.add('active');
+
+        // Etiqueta
+        let label;
+        if (isToday) {
+            label = 'Hoy';
+        } else if (idx === 1) {
+            label = 'Ayer';
+        } else {
+            label = d.toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit' });
+            label = cap(label);
+        }
+
+        btn.innerHTML = `<span class="pill-dot"></span>${label}`;
+        btn.title = d.toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        btn.dataset.dateKey = key;
+
+        btn.addEventListener('click', () => onDayPillClick(key));
+        bar.appendChild(btn);
+    });
+};
+
+// ── Click en píldora de día ──────────────────────────────────
+const onDayPillClick = (key) => {
+    const liveDateKey = rateDate ? toDateKey(rateDate) : toDateKey(new Date());
+
+    if (key === liveDateKey) {
+        // Volver al modo live
+        selectedDayKey = null;
+        const live = historyCache['__live__'];
+        if (live) data = { ...data, ...live };
+        showError(null);
+        buildDaysBar();
+        updateRateDateBadge();
+        updateUI();
+        return;
+    }
+
+    // Buscar en historial local
+    const entry = historyCache[key] || loadHistoryEntry(key);
+    selectedDayKey = key;
+    showError(null);
+
+    if (entry) {
+        data = { ...data, bcv: entry.bcv, binance: entry.binance, euro: entry.euro };
+    } else {
+        // No hay datos reales para ese día
+        showError('Sin datos guardados para ese día. El historial se guarda automáticamente cada día que abres la app.');
+        // Mostrar guiones en los valores
+        ['total-bcv', 'total-euro', 'total-binance', 'base-bcv', 'base-euro', 'base-binance',
+            'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro'].forEach(id => set(id, '--'));
+    }
+
+    buildDaysBar();
+    updateRateDateBadge();
+    if (entry) updateUI();
+};
+
+// (fetchHistorical eliminado — ve.dolarapi.com no tiene API histórica pública)
 
 // ── Fetch de tasas ────────────────────────────────────────────
 const fetchData = async () => {
@@ -333,17 +513,30 @@ const fetchData = async () => {
         return;
     }
 
+    // Al actualizar, volvemos al modo live
+    selectedDayKey = null;
+
     setLoadState(true);
     showError(null);
 
     try {
         let bcv = 0, paralelo = 0, euro = 0;
+        let apiRateDate = null;
 
         const resUSD = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) });
         if (!resUSD.ok) throw new Error(`HTTP ${resUSD.status}`);
         const jUSD = await resUSD.json();
-        bcv = jUSD.find(i => i.fuente === 'oficial')?.promedio || 0;
-        paralelo = jUSD.find(i => i.fuente === 'paralelo')?.promedio || 0;
+        const bcvEntry = jUSD.find(i => i.fuente === 'oficial');
+        const paralelEntry = jUSD.find(i => i.fuente === 'paralelo');
+        bcv = bcvEntry?.promedio || 0;
+        paralelo = paralelEntry?.promedio || 0;
+
+        // Intentar extraer la fecha de actualización de la tasa
+        const rawDate = bcvEntry?.fechaActualizacion || bcvEntry?.fecha || paralelEntry?.fechaActualizacion || null;
+        if (rawDate) {
+            apiRateDate = new Date(rawDate);
+            if (isNaN(apiRateDate.getTime())) apiRateDate = null;
+        }
 
         const resEUR = await fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) });
         if (!resEUR.ok) throw new Error(`HTTP ${resEUR.status}`);
@@ -355,6 +548,15 @@ const fetchData = async () => {
         if (!bcv || !paralelo || !euro) throw new Error('Datos incompletos');
 
         data = { ...data, bcv, binance: paralelo, euro };
+        rateDate = apiRateDate;
+
+        // Guardar datos live en caché en memoria
+        historyCache['__live__'] = { bcv, binance: paralelo, euro };
+
+        // Guardar en localStorage historial del día real de la tasa
+        const entryDateKey = apiRateDate ? toDateKey(apiRateDate) : toDateKey(new Date());
+        historyCache[entryDateKey] = { bcv, binance: paralelo, euro };
+        saveHistoryEntry(entryDateKey, { bcv, binance: paralelo, euro });
 
     } catch (err) {
         console.error('[fetchData]', err.message);
@@ -364,6 +566,7 @@ const fetchData = async () => {
         }
     } finally {
         setLoadState(false);
+        buildDaysBar(); // rerender con fecha conocida
     }
 };
 
@@ -487,6 +690,8 @@ const init = () => {
     setupCurrencyModeToggle();
     setupCopyBtn();
     registerServiceWorker();
+    buildDaysBar(); // render inicial de la barra de días
+    loadAllHistory(); // cargar historial local guardado
 
     if (loadFromStorage()) {
         updateUI();
