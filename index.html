@@ -79,9 +79,6 @@
                 <button id="btn-theme" class="icon-btn" title="Cambiar tema">
                     <i data-lucide="sun" class="w-4 h-4" id="icon-theme"></i>
                 </button>
-                <button id="btn-edit" class="icon-btn" title="Editar tasas">
-                    <i data-lucide="edit-2" class="w-4 h-4"></i>
-                </button>
                 <button id="btn-refresh" class="icon-btn" title="Actualizar">
                     <i data-lucide="refresh-cw" class="w-4 h-4" id="icon-refresh"></i>
                 </button>
@@ -100,7 +97,16 @@
             <div class="input-wrap">
                 <span class="input-prefix">USD / EUR</span>
                 <input type="number" id="input-amount" value="1" min="0" step="any" placeholder="0" class="calc-input"
-                    inputmode="decimal">
+                    inputmode="decimal" onfocus="this.select()">
+            </div>
+
+            <!-- Botones rápidos de monto -->
+            <div class="quick-amounts">
+                <button class="quick-btn" data-amount="10">10</button>
+                <button class="quick-btn" data-amount="20">20</button>
+                <button class="quick-btn" data-amount="30">30</button>
+                <button class="quick-btn" data-amount="50">50</button>
+                <button class="quick-btn" data-amount="100">100</button>
             </div>
 
             <!-- Resultado estrella -->

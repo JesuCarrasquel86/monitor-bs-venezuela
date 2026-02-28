@@ -204,26 +204,13 @@ const updateUI = () => {
     setVal('input-euro', data.euro);
     setVal('input-binance', data.binance);
 
-    // Toggle vista/edición
+    // Toggle vista/edición — mantenido por compatibilidad interna
     ['bcv', 'euro', 'binance'].forEach(k => {
         const view = document.getElementById(`view-${k}`);
         const edit = document.getElementById(`edit-${k}`);
-        if (view) view.style.display = isEditing ? 'none' : '';
-        if (edit) edit.style.display = isEditing ? '' : 'none';
+        if (view) view.style.display = '';
+        if (edit) edit.style.display = 'none';
     });
-
-    // Botón editar
-    const btnEdit = document.getElementById('btn-edit');
-    if (btnEdit) {
-        if (isEditing) {
-            btnEdit.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i>';
-            btnEdit.classList.add('active');
-            set('text-update', 'Edición manual activa');
-        } else {
-            btnEdit.innerHTML = '<i data-lucide="edit-2" class="w-4 h-4"></i>';
-            btnEdit.classList.remove('active');
-        }
-    }
 
     lucide.createIcons();
 };
@@ -368,7 +355,23 @@ const registerServiceWorker = async () => {
 const setupEventListeners = () => {
     document.getElementById('input-amount')?.addEventListener('input', (e) => {
         data.amount = Number(e.target.value) || 0;
+        // Quitar active de todos los chips
+        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
         updateUI();
+    });
+
+    // Botones rápidos de monto
+    document.querySelectorAll('.quick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val = Number(btn.dataset.amount);
+            data.amount = val;
+            const input = document.getElementById('input-amount');
+            if (input) input.value = val;
+            // Highlight del chip activo
+            document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateUI();
+        });
     });
 
     ['bcv', 'euro', 'binance'].forEach(k => {
@@ -376,11 +379,6 @@ const setupEventListeners = () => {
             data[k] = Number(e.target.value) || 0;
             updateUI();
         });
-    });
-
-    document.getElementById('btn-edit')?.addEventListener('click', () => {
-        isEditing = !isEditing;
-        updateUI();
     });
 
     document.getElementById('btn-refresh')?.addEventListener('click', fetchData);

@@ -206,6 +206,49 @@ body {
     margin-bottom: 0.5rem;
 }
 
+/* ── Quick amount chips ── */
+.quick-amounts {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 1rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.quick-amounts::-webkit-scrollbar {
+    display: none;
+}
+
+.quick-btn {
+    flex-shrink: 0;
+    height: 30px;
+    padding: 0 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border-input);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.01em;
+}
+
+.quick-btn:hover,
+.quick-btn.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(240, 185, 11, 0.3);
+}
+
+.quick-btn:active {
+    transform: scale(0.95);
+}
+
 /* ── Input limpio, inspirado en Binance ── */
 .input-wrap {
     display: flex;
