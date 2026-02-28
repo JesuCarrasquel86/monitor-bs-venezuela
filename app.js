@@ -106,7 +106,7 @@ const formatUsdt = (val) =>
     }).format(val);
 
 // ── Persistencia ─────────────────────────────────────────────
-console.log('monitor-bs-vz v1.8.0 starting...');
+console.log('monitor-bs-vz v1.9.0 starting...');
 const STORAGE_KEY = 'monitor-dolar-data';
 const THEME_KEY = 'monitor-dolar-theme';
 const HISTORY_KEY = 'monitor-dolar-history'; // historial diario: { 'YYYY-MM-DD': { bcv, binance, euro } }
@@ -467,11 +467,11 @@ const buildDaysBar = () => {
 };
 
 // ── Click en píldora de día ──────────────────────────────────
-const onDayPillClick = (key) => {
+const onDayPillClick = async (key) => {
     const liveDateKey = rateDate ? toDateKey(rateDate) : toDateKey(new Date());
 
+    // Volver al modo live
     if (key === liveDateKey) {
-        // Volver al modo live
         selectedDayKey = null;
         const live = historyCache['__live__'];
         if (live) data = { ...data, ...live };
@@ -482,29 +482,56 @@ const onDayPillClick = (key) => {
         return;
     }
 
-    // Buscar en historial local
-    const entry = historyCache[key] || loadHistoryEntry(key);
     selectedDayKey = key;
     showError(null);
-
-    if (entry) {
-        data = { ...data, bcv: entry.bcv, binance: entry.binance, euro: entry.euro };
-    } else {
-        // No hay datos reales para ese día
-        showError('Sin datos guardados para ese día. El historial se guarda automáticamente cada día que abres la app.');
-        // Mostrar guiones en los valores
-        ['total-bcv', 'total-euro', 'total-binance', 'base-bcv', 'base-euro', 'base-binance',
-            'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro'].forEach(id => set(id, '--'));
-    }
-
     buildDaysBar();
     updateRateDateBadge();
-    if (entry) updateUI();
+
+    // 1º: memoria
+    if (historyCache[key]) {
+        data = { ...data, ...historyCache[key] };
+        updateUI();
+        return;
+    }
+
+    // 2º: localStorage
+    const local = loadHistoryEntry(key);
+    if (local) {
+        historyCache[key] = local;
+        data = { ...data, ...local };
+        updateUI();
+        return;
+    }
+
+    // 3º: Cloudflare KV via /api/history
+    try {
+        const res = await fetch(`/api/history?date=${key}`, { signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+            const j = await res.json();
+            if (j.bcv && j.binance && j.euro) {
+                const entry = { bcv: j.bcv, binance: j.binance, euro: j.euro };
+                historyCache[key] = entry;
+                saveHistoryEntry(key, entry); // guardar local también
+                data = { ...data, ...entry };
+                updateUI();
+                return;
+            }
+        } else if (res.status === 404) {
+            showError('Sin datos para ese día. El historial se acumula con cada visita a la app.');
+            ['total-bcv', 'total-euro', 'total-binance', 'base-bcv', 'base-euro', 'base-binance',
+                'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro'].forEach(id => set(id, '--'));
+            return;
+        }
+    } catch (e) {
+        console.warn('[history API]', e.message);
+    }
+
+    // Sin datos en ninguna fuente
+    showError('Sin datos guardados para ese día.');
+    ['total-bcv', 'total-euro', 'total-binance', 'base-bcv', 'base-euro', 'base-binance',
+        'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro'].forEach(id => set(id, '--'));
 };
-
-// (fetchHistorical eliminado — ve.dolarapi.com no tiene API histórica pública)
-
-// ── Fetch de tasas ────────────────────────────────────────────
+// ── Fetch de tasas (con Cloudflare Function + fallback dolarapi) ────────────
 const fetchData = async () => {
     if (isEditing) return;
     if (!navigator.onLine) {
@@ -513,50 +540,63 @@ const fetchData = async () => {
         return;
     }
 
-    // Al actualizar, volvemos al modo live
     selectedDayKey = null;
-
     setLoadState(true);
     showError(null);
 
     try {
-        let bcv = 0, paralelo = 0, euro = 0;
+        let bcv = 0, binance = 0, euro = 0;
         let apiRateDate = null;
+        let usedCFFunction = false;
 
-        const resUSD = await fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) });
-        if (!resUSD.ok) throw new Error(`HTTP ${resUSD.status}`);
-        const jUSD = await resUSD.json();
-        const bcvEntry = jUSD.find(i => i.fuente === 'oficial');
-        const paralelEntry = jUSD.find(i => i.fuente === 'paralelo');
-        bcv = bcvEntry?.promedio || 0;
-        paralelo = paralelEntry?.promedio || 0;
-
-        // Intentar extraer la fecha de actualización de la tasa
-        const rawDate = bcvEntry?.fechaActualizacion || bcvEntry?.fecha || paralelEntry?.fechaActualizacion || null;
-        if (rawDate) {
-            apiRateDate = new Date(rawDate);
-            if (isNaN(apiRateDate.getTime())) apiRateDate = null;
+        // ─ Intento 1: Cloudflare Pages Function /api/rates ─
+        try {
+            const res = await fetch('/api/rates', { signal: AbortSignal.timeout(8000) });
+            if (res.ok) {
+                const j = await res.json();
+                if (j.bcv && j.binance && j.euro) {
+                    ({ bcv, binance, euro } = j);
+                    if (j.rateDate) apiRateDate = new Date(j.rateDate + 'T12:00:00');
+                    usedCFFunction = true;
+                }
+            }
+        } catch (e) {
+            console.warn('[/api/rates]', e.message);
         }
 
-        const resEUR = await fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) });
-        if (!resEUR.ok) throw new Error(`HTTP ${resEUR.status}`);
-        const jEUR = await resEUR.json();
-        euro = Array.isArray(jEUR)
-            ? (jEUR.find(i => i.fuente === 'oficial')?.promedio || 0)
-            : (jEUR.promedio || 0);
+        // ─ Intento 2 (fallback): dolarapi.com directo ─
+        if (!usedCFFunction) {
+            const [resUSD, resEUR] = await Promise.all([
+                fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) }),
+                fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) }),
+            ]);
+            if (!resUSD.ok || !resEUR.ok) throw new Error('dolarapi no disponible');
+            const jUSD = await resUSD.json();
+            const jEUR = await resEUR.json();
+            const bcvEntry = jUSD.find(i => i.fuente === 'oficial');
+            const paralelEntry = jUSD.find(i => i.fuente === 'paralelo');
+            bcv = bcvEntry?.promedio ?? 0;
+            binance = paralelEntry?.promedio ?? 0;
+            euro = Array.isArray(jEUR)
+                ? (jEUR.find(i => i.fuente === 'oficial')?.promedio ?? 0)
+                : (jEUR.promedio ?? 0);
+            const rawDate = bcvEntry?.fechaActualizacion ?? null;
+            if (rawDate) {
+                apiRateDate = new Date(rawDate);
+                if (isNaN(apiRateDate.getTime())) apiRateDate = null;
+            }
+        }
 
-        if (!bcv || !paralelo || !euro) throw new Error('Datos incompletos');
+        if (!bcv || !binance || !euro) throw new Error('Datos incompletos');
 
-        data = { ...data, bcv, binance: paralelo, euro };
+        data = { ...data, bcv, binance, euro };
         rateDate = apiRateDate;
 
-        // Guardar datos live en caché en memoria
-        historyCache['__live__'] = { bcv, binance: paralelo, euro };
-
-        // Guardar en localStorage historial del día real de la tasa
+        // Guardar en memoria y localStorage
+        historyCache['__live__'] = { bcv, binance, euro };
         const entryDateKey = apiRateDate ? toDateKey(apiRateDate) : toDateKey(new Date());
-        historyCache[entryDateKey] = { bcv, binance: paralelo, euro };
-        saveHistoryEntry(entryDateKey, { bcv, binance: paralelo, euro });
+        historyCache[entryDateKey] = { bcv, binance, euro };
+        saveHistoryEntry(entryDateKey, { bcv, binance, euro });
 
     } catch (err) {
         console.error('[fetchData]', err.message);
@@ -566,7 +606,7 @@ const fetchData = async () => {
         }
     } finally {
         setLoadState(false);
-        buildDaysBar(); // rerender con fecha conocida
+        buildDaysBar();
     }
 };
 
