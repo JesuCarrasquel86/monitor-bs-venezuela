@@ -1,9 +1,0 @@
-# Cloudflare Worker — monitor-bs-vz
-name = "monitor-bs-vz"
-main = "_worker.js"
-compatibility_date = "2024-01-01"
-
-# Binding KV: RATES_HISTORY
-[[kv_namespaces]]
-binding = "RATES_HISTORY"
-id = "17daa9a692794367bd4a8847a1236e78"
