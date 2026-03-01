@@ -1102,3 +1102,38 @@ body {
     color: var(--text-secondary);
     padding-bottom: 0.25rem;
 }
+
+/* ── Quick Amounts inline (en la fila del label Cantidad) ── */
+.quick-amounts-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    /* empuja a la derecha */
+}
+
+.quick-amounts-inline .quick-btn {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    line-height: 1;
+}
+
+.quick-amounts-inline .quick-btn:hover {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+
+.quick-amounts-inline .quick-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 600;
+}

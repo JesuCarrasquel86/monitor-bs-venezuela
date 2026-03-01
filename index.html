@@ -19,7 +19,7 @@
         rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=1.8">
+    <link rel="stylesheet" href="style.css?v=1.9">
 </head>
 
 <body>
@@ -87,12 +87,20 @@
 
         <!-- Input Calculadora -->
         <div class="input-section">
-            <!-- Label con botón ? -->
+            <!-- Label con botón ? + quick amounts en la misma fila -->
             <div class="section-label-row">
                 <label class="section-label">Cantidad</label>
                 <button class="help-btn" data-tip="cantidad">
                     <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
                 </button>
+                <!-- Botones rápidos de monto (inline) -->
+                <div class="quick-amounts-inline">
+                    <button class="quick-btn" data-amount="10">10</button>
+                    <button class="quick-btn" data-amount="20">20</button>
+                    <button class="quick-btn" data-amount="30">30</button>
+                    <button class="quick-btn" data-amount="50">50</button>
+                    <button class="quick-btn" data-amount="100">100</button>
+                </div>
             </div>
             <div class="input-wrap">
                 <button id="btn-currency-mode" class="input-prefix-btn" title="Cambiar modo">
@@ -101,15 +109,6 @@
                 </button>
                 <input type="number" id="input-amount" value="1" min="0" step="any" placeholder="0" class="calc-input"
                     inputmode="decimal" onfocus="this.select()">
-            </div>
-
-            <!-- Botones rápidos de monto -->
-            <div class="quick-amounts">
-                <button class="quick-btn" data-amount="10">10</button>
-                <button class="quick-btn" data-amount="20">20</button>
-                <button class="quick-btn" data-amount="30">30</button>
-                <button class="quick-btn" data-amount="50">50</button>
-                <button class="quick-btn" data-amount="100">100</button>
             </div>
 
             <!-- Resultado estrella -->
@@ -134,8 +133,7 @@
 
                     <!-- Sub-explicación -->
                     <p class="usdt-sub">
-                        Para cubrir <strong id="sub-amount">1 USD</strong> a tasa BCV vendiendo USDT al precio del
-                        paralelo
+                        Para cubrir <strong id="sub-amount">1 USD</strong> a tasa BCV vendiendo USDT en Binance
                     </p>
                 </div>
             </div>
@@ -144,16 +142,14 @@
 
         <!-- Grid de tasas -->
         <div class="rates-section">
-            <!-- Cabecera de tasas con fecha y navegación de días -->
+            <!-- Cabecera de tasas -->
             <div class="rates-header">
                 <div class="rates-title-row">
                     <p class="section-label">Tasas</p>
-                    <span class="rate-date-badge" id="rate-date-badge">hoy</span>
+                    <span class="rate-date-badge" id="rate-date-badge" style="display:none"></span>
                 </div>
-                <!-- Selector de días (últimos 7 días) -->
-                <div class="days-bar" id="days-bar">
-                    <!-- Se genera dinámicamente en app.js -->
-                </div>
+                <!-- Selector de días — oculto por ahora -->
+                <div class="days-bar" id="days-bar" style="display:none"></div>
             </div>
             <div class="rates-grid">
 
@@ -222,15 +218,9 @@
 
             </div>
 
-            <!-- Euro en USDT -->
-            <div class="extra-row">
-                <div class="flex items-center gap-1.5">
-                    <span>Euro en USDT</span>
-                    <button class="help-btn" data-tip="euro-usdt">
-                        <i data-lucide="help-circle" class="w-3 h-3"></i>
-                    </button>
-                </div>
-                <span id="eq-usdt-euro" class="font-semibold text-blue-400">--</span>
+            <!-- Euro en USDT — oculto por ahora -->
+            <div class="extra-row" style="display:none">
+                <span id="eq-usdt-euro"></span>
             </div>
 
             <!-- Error -->
@@ -250,7 +240,7 @@
 
     </div>
 
-    <script src="app.js?v=1.8"></script>
+    <script src="app.js?v=1.9"></script>
 </body>
 
 </html>
