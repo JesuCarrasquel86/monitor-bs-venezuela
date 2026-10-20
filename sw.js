@@ -4,7 +4,7 @@
                Cache-First para CDNs externos
    ============================================================ */
 
-const CACHE_NAME = 'monitor-dolar-v1.10.0';
+const CACHE_NAME = 'monitor-dolar-v1.12.0';
 const OWN_ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png'];
 
@@ -32,8 +32,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // APIs externas → dejar pasar directo (sin caché)
-    if (url.hostname.includes('dolarapi.com')) return;
+    // APIs externas y propias (/api/*) → dejar pasar directo (sin caché)
+    // Antes solo se excluía dolarapi.com; /api/rates y /api/history caían
+    // en la rama "Cache-First" de abajo y quedaban servidas desde caché
+    // para siempre, por lo que las tasas no se refrescaban.
+    if (url.hostname.includes('dolarapi.com') || url.pathname.startsWith('/api/')) return;
 
     const isOwnAsset = OWN_ASSETS.some(a => url.pathname === a || url.pathname === '/');
 

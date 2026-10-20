@@ -83,13 +83,13 @@ const setupTooltips = () => {
 
 
 let data = { bcv: 419.99, binance: 604.78, euro: 495.61, amount: 1 };
-let isEditing = false;
 let isLoading = false;
 let convMode = 'usd';     // 'usd' = entrada USD/EUR → Bs | 'bs' = entrada Bs → USD
 let deferredInstallPrompt = null;
 let historyCache = {};    // { 'YYYY-MM-DD': { bcv, binance, euro } }
 let selectedDayKey = null; // null = hoy (live)
 let rateDate = null;       // fecha de la tasa actual (Date object o null)
+let lastUsdtNeeded = 0;    // último "USDT a vender" calculado, para copiar/abrir Binance
 
 
 // ── Formato número venezolano ─────────────────────────────────
@@ -106,7 +106,7 @@ const formatUsdt = (val) =>
     }).format(val);
 
 // ── Persistencia ─────────────────────────────────────────────
-console.log('monitor-bs-vz v1.9.0 starting...');
+console.log('monitor-bs-vz v2.1.0 starting...');
 const STORAGE_KEY = 'monitor-dolar-data';
 const THEME_KEY = 'monitor-dolar-theme';
 const HISTORY_KEY = 'monitor-dolar-history'; // historial diario: { 'YYYY-MM-DD': { bcv, binance, euro } }
@@ -213,6 +213,10 @@ const updateUI = () => {
     const ph = '--';
     const fmt = (v) => isLoading ? ph : formatBs(v);
 
+    // Brecha en % es independiente del monto/modo: solo depende de las tasas
+    const gapPct = data.bcv > 0 ? ((data.binance - data.bcv) / data.bcv) * 100 : 0;
+    if (!isLoading) checkGapAlert(gapPct);
+
     if (convMode === 'usd') {
         // ── USD/EUR → Bs (modo por defecto) ──
         const totalBcv = data.bcv * data.amount;
@@ -222,6 +226,7 @@ const updateUI = () => {
         const diffPct = data.bcv > 0 ? (((data.binance - data.bcv) / data.bcv) * 100) : 0;
         const eqUsdt = data.binance > 0 ? totalBcv / data.binance : 0;
         const eqUsdtEuro = data.binance > 0 ? totalEuro / data.binance : 0;
+        lastUsdtNeeded = eqUsdt;
 
         set('total-bcv', fmt(totalBcv));
         set('total-euro', fmt(totalEuro));
@@ -242,6 +247,7 @@ const updateUI = () => {
         const usdAtBinance = data.binance > 0 ? data.amount / data.binance : 0;
         const eurAtBcv = data.euro > 0 ? data.amount / data.euro : 0;
         const usdtNeeded = data.binance > 0 ? data.amount / data.binance : 0;
+        lastUsdtNeeded = usdtNeeded;
         const diffUsd = usdAtBcv - usdAtBinance;
         const diffPct = usdAtBinance > 0 ? (diffUsd / usdAtBinance) * 100 : 0;
 
@@ -264,17 +270,6 @@ const updateUI = () => {
             .forEach(id => popElement(id));
     }
 
-    setVal('input-bcv', data.bcv);
-    setVal('input-euro', data.euro);
-    setVal('input-binance', data.binance);
-
-    ['bcv', 'euro', 'binance'].forEach(k => {
-        const view = document.getElementById(`view-${k}`);
-        const edit = document.getElementById(`edit-${k}`);
-        if (view) view.style.display = '';
-        if (edit) edit.style.display = 'none';
-    });
-
     // Actualizar prefijo del input según modo
     const currLabel = document.getElementById('currency-mode-label');
     const currBtn = document.getElementById('btn-currency-mode');
@@ -287,10 +282,6 @@ const updateUI = () => {
 
 // ── Helpers DOM ───────────────────────────────────────────────
 const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-
-// ── Toggle nombre mercado ── (conservado por compatibilidad, sin botón en UI)
-const setupMarketToggle = () => { };
 
 // ── Toggle modo de divisa (USD/EUR ⇔ Bs.) ─────────────────────
 const setupCurrencyModeToggle = () => {
@@ -305,23 +296,342 @@ const setupCurrencyModeToggle = () => {
     });
 };
 
+// ── Feedback visual temporal en un botón (ícono "check" y vuelta atrás) ──
+const flashIcon = (btn, icon, tempIcon, originalIcon, ms = 1800) => {
+    if (!icon) return;
+    btn?.classList.add('copied');
+    icon.setAttribute('data-lucide', tempIcon);
+    lucide.createIcons();
+    setTimeout(() => {
+        btn?.classList.remove('copied');
+        icon.setAttribute('data-lucide', originalIcon);
+        lucide.createIcons();
+    }, ms);
+};
+
 // ── Botón copiar USDT ──────────────────────────────────────────
 const setupCopyBtn = () => {
     document.getElementById('btn-copy-usdt')?.addEventListener('click', () => {
         const val = document.getElementById('eq-usdt')?.textContent;
         if (!val || val === '--') return;
         navigator.clipboard.writeText(val).then(() => {
-            const btn = document.getElementById('btn-copy-usdt');
-            const icon = document.getElementById('icon-copy');
-            btn?.classList.add('copied');
-            icon?.setAttribute('data-lucide', 'check');
-            lucide.createIcons();
-            setTimeout(() => {
-                btn?.classList.remove('copied');
-                icon?.setAttribute('data-lucide', 'copy');
-                lucide.createIcons();
-            }, 1800);
+            flashIcon(document.getElementById('btn-copy-usdt'), document.getElementById('icon-copy'), 'check', 'copy');
         }).catch(() => { });
+    });
+};
+
+// ── Botón compartir resumen ─────────────────────────────────────
+const buildShareText = () => {
+    const dir = convMode === 'usd' ? `${data.amount} USD/EUR` : `${formatBs(data.amount)} Bs`;
+    const bcvText = document.getElementById('total-bcv')?.textContent || '--';
+    const binanceText = document.getElementById('total-binance')?.textContent || '--';
+    const gapText = document.getElementById('diff-pct')?.textContent || '--';
+    const eqText = document.getElementById('eq-usdt')?.textContent || '--';
+    return [
+        `Monitor Bs. — ${dir}`,
+        `BCV: ${bcvText}`,
+        `Binance: ${binanceText}`,
+        `Brecha: ${gapText}`,
+        `USDT a vender en Binance: ${eqText}`,
+    ].join('\n');
+};
+
+const setupShareBtn = () => {
+    document.getElementById('btn-share')?.addEventListener('click', async () => {
+        const text = buildShareText();
+        if (navigator.share) {
+            try { await navigator.share({ text }); } catch (e) { /* cancelado por el usuario */ }
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            flashIcon(document.getElementById('btn-share'), document.getElementById('icon-share'), 'check', 'share-2');
+        } catch (e) { }
+    });
+};
+
+// ── Acción rápida: copiar monto y abrir Binance P2P ─────────────
+// Binance P2P no soporta prellenar el monto a vender vía URL, así que
+// copiamos el valor (en formato numérico plano, sin coma decimal) para
+// pegarlo directo en el anuncio una vez abierto.
+const setupBinanceAction = () => {
+    document.getElementById('btn-binance-p2p')?.addEventListener('click', async () => {
+        if (lastUsdtNeeded > 0) {
+            try { await navigator.clipboard.writeText(lastUsdtNeeded.toFixed(2)); } catch (e) { }
+        }
+        window.open('https://p2p.binance.com/trade/sell/USDT?fiat=VES', '_blank', 'noopener');
+    });
+};
+
+// ── Calculadora integrada (overlay) ────────────────────────────
+// Suma/resta/multiplica/divide varios montos antes de usarlos como Cantidad,
+// sin depender de una app de calculadora externa.
+let calcEvalExpr = '';     // expresión real, para evaluar: "10+20*2"
+let calcDisplayExpr = '';  // expresión mostrada, con símbolos bonitos: "10+20×2"
+let calcJustEvaluated = false;
+
+const CALC_OP_DISPLAY = { '+': '+', '-': '−', '*': '×', '/': '÷' };
+const calcIsOperator = (c) => c === '+' || c === '-' || c === '*' || c === '/';
+const calcLastChar = () => calcEvalExpr.slice(-1);
+
+const calcTokenize = (expr) => expr.match(/\d+\.?\d*%?|\.\d+%?|[+\-*/]/g) || [];
+
+// Evalúa tokens respetando precedencia (* / antes que + -); % = valor/100
+const calcEvalTokens = (tokens) => {
+    if (!tokens.length) return 0;
+    const vals = tokens.map(t => calcIsOperator(t) ? t : (t.endsWith('%') ? parseFloat(t) / 100 : parseFloat(t)));
+    const stage = [vals[0]];
+    for (let i = 1; i < vals.length; i += 2) {
+        const op = vals[i];
+        const rhs = vals[i + 1];
+        if (rhs === undefined) break;
+        if (op === '*') stage[stage.length - 1] *= rhs;
+        else if (op === '/') stage[stage.length - 1] = rhs !== 0 ? stage[stage.length - 1] / rhs : 0;
+        else stage.push(op, rhs);
+    }
+    let result = stage[0] || 0;
+    for (let i = 1; i < stage.length; i += 2) {
+        const op = stage[i];
+        const rhs = stage[i + 1];
+        if (rhs === undefined) break;
+        if (op === '+') result += rhs;
+        else if (op === '-') result -= rhs;
+    }
+    return result;
+};
+
+const calcPreview = () => {
+    if (!calcEvalExpr || calcIsOperator(calcLastChar())) return null;
+    try {
+        const result = calcEvalTokens(calcTokenize(calcEvalExpr));
+        return Number.isFinite(result) ? result : null;
+    } catch (e) { return null; }
+};
+
+const updateCalcDisplay = () => {
+    const exprEl = document.getElementById('calc-expression');
+    const resultEl = document.getElementById('calc-result');
+    if (exprEl) exprEl.textContent = calcDisplayExpr || '0';
+    if (resultEl) {
+        const preview = calcPreview();
+        const hasOp = /[+\-*/]/.test(calcEvalExpr);
+        resultEl.textContent = (preview !== null && hasOp) ? `= ${formatUsdt(preview)}` : ' ';
+    }
+    renderCalcItems();
+};
+
+// ── Modo "canasta": lista de ítems cuando la expresión es una suma pura ──
+const getCalcItems = () => {
+    if (!calcEvalExpr || calcIsOperator(calcLastChar())) return null;
+    const isPureSum = /^[\d.]+%?(\+[\d.]+%?)*$/.test(calcEvalExpr);
+    if (!isPureSum) return null;
+    const evalParts = calcEvalExpr.split('+');
+    if (evalParts.length < 2) return null;
+    const dispParts = calcDisplayExpr.split('+');
+    return evalParts.map((ev, i) => ({ evalText: ev, dispText: dispParts[i] ?? ev }));
+};
+
+const renderCalcItems = () => {
+    const wrap = document.getElementById('calc-items');
+    if (!wrap) return;
+    const items = getCalcItems();
+    if (!items) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = '';
+    items.forEach((item, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'calc-item';
+        chip.textContent = item.dispText;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'calc-item-remove';
+        removeBtn.setAttribute('aria-label', 'Quitar');
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeCalcItem(idx));
+        chip.appendChild(removeBtn);
+        wrap.appendChild(chip);
+    });
+};
+
+const removeCalcItem = (idx) => {
+    const items = getCalcItems();
+    if (!items) return;
+    items.splice(idx, 1);
+    if (!items.length) { calcClear(); return; }
+    calcEvalExpr = items.map(i => i.evalText).join('+');
+    calcDisplayExpr = items.map(i => i.dispText).join('+');
+    calcJustEvaluated = false;
+    updateCalcDisplay();
+};
+
+const calcAppendDigit = (d) => {
+    if (calcJustEvaluated) { calcEvalExpr = ''; calcDisplayExpr = ''; calcJustEvaluated = false; }
+    if (calcLastChar() === '%') return; // "%" cierra el número; hace falta un operador para seguir
+    if (d === '.') {
+        const lastNum = calcEvalExpr.match(/(\d*\.?\d*)$/)?.[0] || '';
+        if (lastNum.includes('.')) return;
+        if (calcEvalExpr === '' || calcIsOperator(calcLastChar())) {
+            calcEvalExpr += '0';
+            calcDisplayExpr += '0';
+        }
+    }
+    calcEvalExpr += d;
+    calcDisplayExpr += d;
+    updateCalcDisplay();
+};
+
+const calcAppendOperator = (op) => {
+    calcJustEvaluated = false;
+    if (!calcEvalExpr) return; // no empezar la expresión con un operador
+    if (calcIsOperator(calcLastChar())) {
+        calcEvalExpr = calcEvalExpr.slice(0, -1) + op;
+        calcDisplayExpr = calcDisplayExpr.slice(0, -1) + CALC_OP_DISPLAY[op];
+    } else {
+        calcEvalExpr += op;
+        calcDisplayExpr += CALC_OP_DISPLAY[op];
+    }
+    updateCalcDisplay();
+};
+
+const calcAppendPercent = () => {
+    const last = calcLastChar();
+    if (!last || calcIsOperator(last) || last === '%') return;
+    calcEvalExpr += '%';
+    calcDisplayExpr += '%';
+    updateCalcDisplay();
+};
+
+const calcBackspace = () => {
+    calcEvalExpr = calcEvalExpr.slice(0, -1);
+    calcDisplayExpr = calcDisplayExpr.slice(0, -1);
+    calcJustEvaluated = false;
+    updateCalcDisplay();
+};
+
+const calcClear = () => {
+    calcEvalExpr = '';
+    calcDisplayExpr = '';
+    calcJustEvaluated = false;
+    updateCalcDisplay();
+};
+
+const calcEquals = () => {
+    const preview = calcPreview();
+    if (preview === null) return;
+    const resultStr = String(Math.round(preview * 1e6) / 1e6);
+    calcEvalExpr = resultStr;
+    calcDisplayExpr = resultStr;
+    calcJustEvaluated = true;
+    updateCalcDisplay();
+};
+
+// ── Historial de cálculos recientes ─────────────────────────────
+const CALC_HISTORY_KEY = 'monitor-dolar-calc-history';
+const CALC_HISTORY_MAX = 8;
+
+const loadCalcHistory = () => {
+    try {
+        const raw = localStorage.getItem(CALC_HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+};
+
+const saveCalcHistoryEntry = (displayExpr, value) => {
+    try {
+        const list = loadCalcHistory();
+        list.unshift({ expr: displayExpr, value });
+        localStorage.setItem(CALC_HISTORY_KEY, JSON.stringify(list.slice(0, CALC_HISTORY_MAX)));
+    } catch (e) { }
+};
+
+const renderCalcHistory = () => {
+    const wrap = document.getElementById('calc-history');
+    if (!wrap) return;
+    const list = loadCalcHistory();
+    if (!list.length) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = '';
+    list.forEach(entry => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'calc-history-chip';
+        chip.textContent = `${entry.expr} = ${formatUsdt(entry.value)}`;
+        chip.addEventListener('click', () => {
+            const resultStr = String(entry.value);
+            calcEvalExpr = resultStr;
+            calcDisplayExpr = resultStr;
+            calcJustEvaluated = true;
+            updateCalcDisplay();
+        });
+        wrap.appendChild(chip);
+    });
+};
+
+const openCalcOverlay = () => {
+    calcClear();
+    renderCalcHistory();
+    const overlay = document.getElementById('calc-overlay');
+    overlay?.classList.remove('hidden');
+    overlay?.setAttribute('aria-hidden', 'false');
+};
+
+const closeCalcOverlay = () => {
+    const overlay = document.getElementById('calc-overlay');
+    overlay?.classList.add('hidden');
+    overlay?.setAttribute('aria-hidden', 'true');
+};
+
+const setupCalculator = () => {
+    document.getElementById('btn-open-calc')?.addEventListener('click', openCalcOverlay);
+    document.getElementById('calc-close')?.addEventListener('click', closeCalcOverlay);
+    document.getElementById('calc-overlay')?.addEventListener('click', (e) => {
+        if (e.target.id === 'calc-overlay') closeCalcOverlay();
+    });
+
+    document.querySelectorAll('.calc-key').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.key;
+            if (key === 'C') calcClear();
+            else if (key === 'back') calcBackspace();
+            else if (key === '=') calcEquals();
+            else if (key === '%') calcAppendPercent();
+            else if (calcIsOperator(key)) calcAppendOperator(key);
+            else calcAppendDigit(key);
+        });
+    });
+
+    // Usar el resultado de la calculadora como Cantidad
+    document.getElementById('btn-calc-use')?.addEventListener('click', () => {
+        const preview = calcPreview();
+        if (preview === null) { closeCalcOverlay(); return; }
+        const finalVal = Math.round(preview * 1e6) / 1e6;
+        if (/[+\-*/]/.test(calcEvalExpr)) saveCalcHistoryEntry(calcDisplayExpr, finalVal);
+        data.amount = finalVal;
+        const input = document.getElementById('input-amount');
+        if (input) input.value = finalVal;
+        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+        updateUI();
+        closeCalcOverlay();
+    });
+
+    // Soporte de teclado físico mientras la calculadora está abierta
+    document.addEventListener('keydown', (e) => {
+        const overlay = document.getElementById('calc-overlay');
+        if (!overlay || overlay.classList.contains('hidden')) return;
+        if (e.key === 'Escape') { closeCalcOverlay(); return; }
+        if (/^[0-9.]$/.test(e.key)) { calcAppendDigit(e.key); return; }
+        if (calcIsOperator(e.key)) { calcAppendOperator(e.key); return; }
+        if (e.key === '%') { calcAppendPercent(); return; }
+        if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); calcEquals(); return; }
+        if (e.key === 'Backspace') { calcBackspace(); return; }
     });
 };
 
@@ -331,7 +641,76 @@ const showError = (msg) => {
     const text = document.getElementById('error-text');
     if (!wrapper || !text) return;
     text.textContent = msg || '';
-    wrapper.style.display = msg ? 'flex' : 'none';
+    wrapper.classList.toggle('hidden', !msg);
+};
+
+// ── Alerta de brecha configurable ───────────────────────────────
+const GAP_THRESHOLD_KEY = 'monitor-dolar-gap-threshold';
+const GAP_ALERT_SENT_KEY = 'monitor-dolar-gap-alert-sent';
+
+const getGapThreshold = () => {
+    const raw = localStorage.getItem(GAP_THRESHOLD_KEY);
+    const n = raw ? parseFloat(raw) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const updateGapAlertUI = (threshold) => {
+    const btn = document.getElementById('btn-gap-alert');
+    if (!btn) return;
+    btn.classList.toggle('gap-alert-active', !!threshold);
+    btn.title = threshold
+        ? `Te avisamos si la brecha supera ${threshold}% (toca para cambiar)`
+        : 'Configurar alerta de brecha';
+};
+
+const setupGapAlertButton = () => {
+    updateGapAlertUI(getGapThreshold());
+    document.getElementById('btn-gap-alert')?.addEventListener('click', () => {
+        const current = getGapThreshold();
+        const input = window.prompt(
+            'Avisarme cuando la brecha supere este % (deja vacío para desactivar):',
+            current ? String(current) : ''
+        );
+        if (input === null) return; // cancelado
+        const trimmed = input.trim();
+        if (trimmed === '') {
+            localStorage.removeItem(GAP_THRESHOLD_KEY);
+            localStorage.removeItem(GAP_ALERT_SENT_KEY);
+            updateGapAlertUI(null);
+            document.getElementById('gap-card')?.classList.remove('gap-card-alert');
+            return;
+        }
+        const n = parseFloat(trimmed.replace(',', '.'));
+        if (!Number.isFinite(n) || n <= 0) return;
+        localStorage.setItem(GAP_THRESHOLD_KEY, String(n));
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+        updateGapAlertUI(n);
+    });
+};
+
+// Resalta la tarjeta de Brecha y notifica (1 vez por umbral/día) si se supera
+const checkGapAlert = (gapPct) => {
+    const threshold = getGapThreshold();
+    const card = document.getElementById('gap-card');
+    if (!threshold || !Number.isFinite(gapPct)) {
+        card?.classList.remove('gap-card-alert');
+        return;
+    }
+    const exceeded = gapPct >= threshold;
+    card?.classList.toggle('gap-card-alert', exceeded);
+    if (!exceeded) return;
+
+    const sentKey = `${toDateKey(new Date())}:${threshold}`;
+    if (localStorage.getItem(GAP_ALERT_SENT_KEY) === sentKey) return;
+    localStorage.setItem(GAP_ALERT_SENT_KEY, sentKey);
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Brecha cambiaria alta', {
+            body: `La brecha es de ${gapPct.toFixed(1)}% (tu límite: ${threshold}%)`,
+            icon: '/icons/icon-192.png',
+        });
+    }
 };
 
 // ── Capitalizar primera letra ──────────────────────────────────────
@@ -394,12 +773,10 @@ const setLoadState = (state) => {
         iconMain?.classList.remove('animate-spin');
         iconMain?.setAttribute('data-lucide', 'calculator');
         if (textMain) textMain.textContent = 'Actualizar Monitor';
-        if (!isEditing) {
-            const now = new Date();
-            set('text-update',
-                `Hoy ${now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true })}`
-            );
-        }
+        const now = new Date();
+        set('text-update',
+            `Hoy ${now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+        );
         saveToStorage();
     }
     updateRateDateBadge();
@@ -533,7 +910,6 @@ const onDayPillClick = async (key) => {
 };
 // ── Fetch de tasas (con Cloudflare Function + fallback dolarapi) ────────────
 const fetchData = async () => {
-    if (isEditing) return;
     if (!navigator.onLine) {
         showError('Sin conexión. Mostrando últimas tasas guardadas.');
         updateUI();
@@ -600,7 +976,7 @@ const fetchData = async () => {
 
     } catch (err) {
         console.error('[fetchData]', err.message);
-        showError('No se obtuvieron tasas. Usa ✏️ para editarlas manualmente.');
+        showError('No se obtuvieron tasas. Intenta actualizar de nuevo en unos minutos.');
         if (!loadFromStorage()) {
             data = { ...data, bcv: 419.99, binance: 604.78, euro: 495.61 };
         }
@@ -614,7 +990,7 @@ const fetchData = async () => {
 const updateOnlineStatus = () => {
     const badge = document.getElementById('offline-badge');
     if (!badge) return;
-    badge.style.display = navigator.onLine ? 'none' : 'flex';
+    badge.classList.toggle('hidden', navigator.onLine);
 };
 
 // ── Instalar banner PWA ───────────────────────────────────────
@@ -674,12 +1050,14 @@ const registerServiceWorker = async () => {
 
 // ── Event Listeners ───────────────────────────────────────────
 const setupEventListeners = () => {
-    document.getElementById('input-amount')?.addEventListener('input', (e) => {
+    const inputAmount = document.getElementById('input-amount');
+    inputAmount?.addEventListener('input', (e) => {
         data.amount = Number(e.target.value) || 0;
         // Quitar active de todos los chips
         document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
         updateUI();
     });
+    inputAmount?.addEventListener('focus', () => inputAmount.select());
 
     // Botones rápidos de monto
     document.querySelectorAll('.quick-btn').forEach(btn => {
@@ -695,13 +1073,6 @@ const setupEventListeners = () => {
         });
     });
 
-    ['bcv', 'euro', 'binance'].forEach(k => {
-        document.getElementById(`input-${k}`)?.addEventListener('input', (e) => {
-            data[k] = Number(e.target.value) || 0;
-            updateUI();
-        });
-    });
-
     document.getElementById('btn-refresh')?.addEventListener('click', fetchData);
     document.getElementById('btn-main')?.addEventListener('click', fetchData);
 
@@ -709,7 +1080,7 @@ const setupEventListeners = () => {
     window.addEventListener('offline', updateOnlineStatus);
 
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState !== 'visible' || isEditing) return;
+        if (document.visibilityState !== 'visible') return;
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
         try {
@@ -729,6 +1100,10 @@ const init = () => {
     setupTooltips();
     setupCurrencyModeToggle();
     setupCopyBtn();
+    setupShareBtn();
+    setupBinanceAction();
+    setupGapAlertButton();
+    setupCalculator();
     registerServiceWorker();
     buildDaysBar(); // render inicial de la barra de días
     loadAllHistory(); // cargar historial local guardado

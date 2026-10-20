@@ -24,10 +24,17 @@ export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    // ── Protección básica con token ──────────────────────────────
-    // Configura SECRET_SEED_TOKEN en CF Pages > Settings > Environment Variables
+    // ── Protección con token (fail-closed) ───────────────────────
+    // Configura SECRET_SEED_TOKEN en CF Pages > Settings > Environment Variables.
+    // Sin esa variable, el endpoint queda deshabilitado en vez de abierto.
+    if (!env.SECRET_SEED_TOKEN) {
+        return new Response(
+            JSON.stringify({ error: 'Seed deshabilitado: configura SECRET_SEED_TOKEN en Cloudflare Pages.' }),
+            { status: 503, headers: CORS }
+        );
+    }
     const token = url.searchParams.get('token');
-    if (env.SECRET_SEED_TOKEN && token !== env.SECRET_SEED_TOKEN) {
+    if (token !== env.SECRET_SEED_TOKEN) {
         return new Response(
             JSON.stringify({ error: 'Acceso denegado. Pasa ?token=TU_TOKEN' }),
             { status: 401, headers: CORS }
