@@ -19,7 +19,7 @@
         rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=2.1">
+    <link rel="stylesheet" href="style.css?v=2.2">
 </head>
 
 <body>
@@ -96,6 +96,84 @@
         </div>
     </div>
 
+    <!-- Configuración (overlay) -->
+    <div id="settings-overlay" class="tooltip-overlay hidden" aria-hidden="true">
+        <div class="tooltip-sheet settings-sheet">
+            <div class="tooltip-header">
+                <div class="tooltip-icon-wrap">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                </div>
+                <h3 class="tooltip-title">Configuración</h3>
+                <button id="settings-close" class="tooltip-close">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="settings-body">
+                <!-- Notificaciones -->
+                <div class="settings-row">
+                    <div class="settings-row-text">
+                        <p class="settings-row-title">Notificaciones</p>
+                        <p class="settings-row-sub">Avisos del navegador cuando la brecha supere tu límite</p>
+                    </div>
+                    <button id="toggle-notifications" class="settings-switch" role="switch" aria-checked="false">
+                        <span class="settings-switch-knob"></span>
+                    </button>
+                </div>
+
+                <!-- Alerta de brecha -->
+                <div class="settings-section">
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Alerta de brecha</p>
+                            <p class="settings-row-sub">Resalta la tarjeta Brecha al superar el %</p>
+                        </div>
+                        <button id="toggle-gap-alert" class="settings-switch" role="switch" aria-checked="false">
+                            <span class="settings-switch-knob"></span>
+                        </button>
+                    </div>
+                    <div id="gap-alert-fields" class="settings-fields hidden">
+                        <div class="settings-input-wrap">
+                            <i data-lucide="percent" class="w-3.5 h-3.5 settings-input-icon"></i>
+                            <input type="number" id="input-gap-threshold" class="settings-input" placeholder="Ej. 40" min="0" step="any">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tasa personalizada -->
+                <div class="settings-section">
+                    <div class="settings-row">
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Tasa personalizada</p>
+                            <p class="settings-row-sub">Agrega una 5ta tarjeta con tu propia tasa</p>
+                        </div>
+                        <button id="toggle-custom-rate" class="settings-switch" role="switch" aria-checked="false">
+                            <span class="settings-switch-knob"></span>
+                        </button>
+                    </div>
+                    <div id="custom-rate-fields" class="settings-fields hidden">
+                        <div class="settings-input-wrap">
+                            <i data-lucide="tag" class="w-3.5 h-3.5 settings-input-icon"></i>
+                            <input type="text" id="input-custom-rate-name" class="settings-input" placeholder="Nombre (ej. Mi Tasa)" maxlength="24">
+                        </div>
+                        <div class="settings-input-wrap">
+                            <i data-lucide="calculator" class="w-3.5 h-3.5 settings-input-icon"></i>
+                            <input type="number" id="input-custom-rate-value" class="settings-input" placeholder="Valor en Bs/$" min="0" step="any">
+                        </div>
+                    </div>
+                </div>
+
+                <p class="settings-version">Monitor Bs. · v2.2.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast de confirmación -->
+    <div id="toast" class="toast hidden">
+        <span class="toast-dot"></span>
+        <span id="toast-text"></span>
+    </div>
+
     <!-- Banner PWA -->
     <div id="install-banner" class="install-banner hidden">
         <div class="flex items-center gap-3">
@@ -137,6 +215,9 @@
                 </button>
                 <button id="btn-refresh" class="icon-btn" title="Actualizar">
                     <i data-lucide="refresh-cw" class="w-4 h-4" id="icon-refresh"></i>
+                </button>
+                <button id="btn-settings" class="icon-btn" title="Configuración">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
                 </button>
             </div>
         </div>
@@ -216,13 +297,11 @@
                     <p class="section-label">Tasas</p>
                     <span class="rate-date-badge" id="rate-date-badge"></span>
                 </div>
-                <!-- Selector de días: últimos 7 días -->
-                <div class="days-bar" id="days-bar"></div>
             </div>
-            <div class="rates-grid">
+            <div class="rates-grid" id="rates-grid">
 
                 <!-- BCV -->
-                <div class="rate-card red">
+                <div class="rate-card red" data-rate="bcv">
                     <div class="rate-header">
                         <span class="rate-tag red">BCV</span>
                         <button class="help-btn" data-tip="bcv">
@@ -231,10 +310,11 @@
                     </div>
                     <p class="rate-value" id="total-bcv">--</p>
                     <p class="rate-base"><span id="base-bcv">--</span> Bs/$</p>
+                    <p class="rate-change" id="change-bcv"></p>
                 </div>
 
                 <!-- Binance -->
-                <div class="rate-card yellow">
+                <div class="rate-card yellow" data-rate="binance">
                     <div class="rate-header">
                         <span class="rate-tag yellow">Binance</span>
                         <button class="help-btn" data-tip="binance">
@@ -243,10 +323,11 @@
                     </div>
                     <p class="rate-value" id="total-binance">--</p>
                     <p class="rate-base"><span id="base-binance">--</span> Bs/$</p>
+                    <p class="rate-change" id="change-binance"></p>
                 </div>
 
                 <!-- Euro -->
-                <div class="rate-card blue">
+                <div class="rate-card blue" data-rate="euro">
                     <div class="rate-header">
                         <span class="rate-tag blue">Euro BCV</span>
                         <button class="help-btn" data-tip="euro">
@@ -255,6 +336,7 @@
                     </div>
                     <p class="rate-value" id="total-euro">--</p>
                     <p class="rate-base"><span id="base-euro">--</span> Bs/€</p>
+                    <p class="rate-change" id="change-euro"></p>
                 </div>
 
                 <!-- Brecha -->
@@ -274,11 +356,54 @@
                     <p class="gap-bs" id="diff-bs">--</p>
                 </div>
 
+                <!-- Tasa personalizada (opcional, desde Configuración) -->
+                <div class="rate-card purple hidden" id="custom-rate-card" data-rate="custom">
+                    <div class="rate-header">
+                        <span class="rate-tag purple" id="custom-rate-tag">Personalizada</span>
+                        <button id="btn-custom-rate-edit" class="help-btn" title="Editar tasa personalizada">
+                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                    <p class="rate-value" id="total-custom">--</p>
+                    <p class="rate-base"><span id="base-custom">--</span> Bs/$</p>
+                </div>
+
             </div>
 
             <!-- Euro en USDT — oculto por ahora -->
             <div class="extra-row hidden">
                 <span id="eq-usdt-euro"></span>
+            </div>
+
+            <!-- Historial -->
+            <div class="flex flex-col gap-1 history-wrap">
+                <button id="history-toggle" class="history-toggle-btn">
+                    <div class="flex items-center gap-2">
+                        <span class="section-label history-toggle-label">Historial</span>
+                        <span class="history-badge" id="history-badge">Últimos datos</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5" id="history-chevron"></i>
+                </button>
+
+                <div id="history-panel" class="history-panel hidden">
+                    <div class="history-filters">
+                        <input type="date" id="history-start" class="history-date-input" title="Fecha inicio">
+                        <span class="history-filters-sep">al</span>
+                        <input type="date" id="history-end" class="history-date-input" title="Fecha fin">
+                    </div>
+                    <div class="history-actions">
+                        <button id="history-reset" class="history-reset-btn">Última semana</button>
+                        <div class="flex items-center gap-2">
+                            <button id="history-export-csv" class="history-export-btn">
+                                <i data-lucide="download" class="w-3.5 h-3.5"></i> CSV
+                            </button>
+                            <button id="history-export-xlsx" class="history-export-btn history-export-xlsx">
+                                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i> Excel
+                            </button>
+                        </div>
+                    </div>
+                    <div id="history-list" class="history-list"></div>
+                </div>
             </div>
 
             <!-- Error -->
@@ -298,7 +423,7 @@
 
     </div>
 
-    <script src="app.js?v=2.1"></script>
+    <script src="app.js?v=2.2"></script>
 </body>
 
 </html>
