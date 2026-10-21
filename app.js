@@ -4,7 +4,7 @@
 
 'use strict';
 
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '3.4.0';
 console.log(`monitor-bs-vz v${APP_VERSION} starting...`);
 
 // ── Claves de almacenamiento (se conservan las de versiones anteriores) ──
@@ -1062,6 +1062,9 @@ const setupOverlays = () => {
 let calcExpr = '';
 let calcJustEvaluated = false;
 let calcEchoExpr = ''; // la operación que produjo el resultado, tras pulsar "="
+let calcEchoRaw = ''; // esa misma operación en formato interno, para volver a editarla
+let calcCursor = null; // posición del cursor dentro de calcExpr; null = al final
+let calcTail = ''; // lo que queda a la derecha del cursor mientras se aplica una tecla
 
 const CALC_DISPLAY_MAP = { '.': ',', '*': '×', '/': '÷', '-': '−', '~': '-' };
 const toCalcDisplay = (s) => s.replace(/[.*/\-~]/g, (ch) => CALC_DISPLAY_MAP[ch]);
@@ -1137,37 +1140,125 @@ const formatExpr = (expr) => expr
     .join('')
     .trim();
 
+// Igual que formatExpr, pero pieza por pieza con el índice de calcExpr de cada
+// carácter, para poder tocar cualquier punto. Separadores de miles y el "0" de
+// ",5" se agregan sin índice.
+const calcDisplayParts = (expr) => {
+    const parts = [];
+    let i = 0;
+    (expr.match(/[+\-*/]|[^+\-*/]+/g) || []).forEach((piece) => {
+        if (isCalcOp(piece)) {
+            const trailing = i === expr.length - 1 ? '' : ' '; // sin espacio colgando al final
+            parts.push([` ${CALC_OP_SYMBOL[piece]}${trailing}`, i++]);
+            return;
+        }
+        const [, neg, int, rest] = piece.match(/^(~?)(\d*)(.*)$/);
+        if (neg) parts.push(['-', i++]);
+        [...int].forEach((digit, k) => {
+            if (k > 0 && (int.length - k) % 3 === 0) parts.push(['.', null]);
+            parts.push([digit, i++]);
+        });
+        if (!int && rest.startsWith('.')) parts.push(['0', null]);
+        [...rest].forEach((ch) => parts.push([toCalcDisplay(ch), i++]));
+    });
+    return parts;
+};
+
+const fillCalcMain = (el) => {
+    el.textContent = '';
+    if (!calcExpr) { el.textContent = '0'; return; }
+    const frag = document.createDocumentFragment();
+    const caret = document.createElement('span');
+    caret.className = 'calc-caret';
+    calcDisplayParts(calcExpr).forEach(([text, i]) => {
+        if (i !== null && i === calcCursor) frag.appendChild(caret);
+        const span = document.createElement('span');
+        span.textContent = text;
+        if (i !== null) span.dataset.i = i;
+        frag.appendChild(span);
+    });
+    el.appendChild(frag);
+};
+
 // La letra se achica por pasos (con transición) cuando la operación es larga
 const CALC_SIZE_STEPS = [[9, 'fs-xl'], [13, 'fs-lg'], [18, 'fs-md'], [Infinity, 'fs-sm']];
 const fitCalcMain = (el) => {
     const len = el.textContent.replace(/\s/g, '').length;
     const size = CALC_SIZE_STEPS.find(([max]) => len <= max)[1];
     CALC_SIZE_STEPS.forEach(([, cls]) => el.classList.toggle(cls, cls === size));
-    el.scrollLeft = el.scrollWidth; // lo último escrito siempre a la vista
+    const caret = el.querySelector('.calc-caret');
+    if (!caret) { el.scrollLeft = el.scrollWidth; return; } // lo último escrito a la vista
+    // Editando en medio: solo se desliza si el cursor quedó fuera de la vista
+    const x = caret.getBoundingClientRect().left - el.getBoundingClientRect().left;
+    if (x < 16 || x > el.clientWidth - 16) el.scrollLeft += x - el.clientWidth / 2;
+};
+
+// Tocar la operación coloca el cursor en ese punto (antes o después del carácter
+// según la mitad que se toque); a la izquierda del texto va al inicio
+const calcCursorFromTap = (e) => {
+    const el = $('calc-main');
+    let span = e.target.closest?.('#calc-main > span');
+    if (span?.classList.contains('calc-caret')) return calcCursor ?? calcExpr.length;
+    while (span && span.dataset.i === undefined) span = span.nextElementSibling;
+    if (span) {
+        const i = Number(span.dataset.i);
+        const r = span.getBoundingClientRect();
+        return e.clientX > r.left + r.width / 2 ? i + 1 : i;
+    }
+    const first = el.querySelector('[data-i]');
+    return first && e.clientX < first.getBoundingClientRect().left ? 0 : calcExpr.length;
+};
+
+const setCalcCursor = (pos) => {
+    if (calcJustEvaluated) { calcJustEvaluated = false; calcEchoExpr = ''; }
+    calcCursor = Math.max(0, Math.min(pos, calcExpr.length));
+    if (calcCursor === calcExpr.length) calcCursor = null;
+    renderCalc();
+};
+
+// Las teclas trabajan sobre lo que está a la izquierda del cursor como si fuera
+// el final de la operación, y después se pega el resto. Si al editar en medio
+// quedara una operación inválida ("5 + + 3"), la tecla no hace nada.
+const CALC_NUM = '(?:\\d+\\.?\\d*|\\.\\d+)%?';
+const CALC_VALID = new RegExp(`^(?:~?${CALC_NUM}(?:[+\\-*/]~?${CALC_NUM})*(?:[+\\-*/]~?)?|~)?$`);
+const calcEdit = (edit) => {
+    if (calcJustEvaluated) calcCursor = null;
+    const before = calcExpr;
+    const beforeCursor = calcCursor;
+    const at = calcCursor ?? calcExpr.length;
+    calcTail = calcExpr.slice(at);
+    calcExpr = calcExpr.slice(0, at);
+    edit();
+    const tail = calcTail;
+    calcTail = '';
+    if (!tail) {
+        calcCursor = null;
+    } else if (CALC_VALID.test(calcExpr + tail)) {
+        calcCursor = calcExpr.length;
+        calcExpr += tail;
+    } else {
+        calcExpr = before;
+        calcCursor = beforeCursor;
+    }
+    renderCalc();
 };
 
 // La línea grande muestra lo que se escribe; arriba, pequeño, el resultado parcial.
 // Al pulsar "=" el resultado pasa a la línea grande.
 const renderCalc = () => {
-    let main;
     let sub = '';
     if (calcJustEvaluated) {
-        main = groupTyped(calcExpr);
         sub = calcEchoExpr;
-    } else if (!calcExpr) {
-        main = '0';
     } else if (calcHasOp() || calcExpr.includes('%')) {
-        main = formatExpr(calcExpr);
         const complete = calcExpr.replace(/[+\-*/~.]+$/, '');
         const live = /[+\-*/%]/.test(complete) ? calcEvaluate(complete) : null;
         if (live !== null) sub = `= ${formatCalc(live)}`;
-    } else {
-        main = groupTyped(calcExpr);
     }
     setText('calc-expression', sub);
+    $('calc-expression')?.classList.toggle('is-editable', calcJustEvaluated && Boolean(calcEchoRaw));
     const mainEl = $('calc-main');
     if (mainEl) {
-        mainEl.textContent = main;
+        fillCalcMain(mainEl);
         fitCalcMain(mainEl);
     }
     renderCalcItems();
@@ -1179,25 +1270,27 @@ const renderCalc = () => {
     });
 };
 
-const calcDigit = (d) => {
+const calcDigit = (d) => calcEdit(() => {
     calcEchoExpr = '';
     if (calcJustEvaluated) { calcExpr = ''; calcJustEvaluated = false; }
     if (calcLast() === '%') return; // "%" cierra el número; hace falta un operador para seguir
     const seg = calcSegment();
+    const whole = seg + calcTail.match(/^[\d.]*/)[0]; // el número completo, si el cursor está en medio
     if (d === '.') {
-        if (seg.includes('.')) return;
+        if (whole.includes('.')) return;
         if (seg === '') calcExpr += '0';
     } else {
-        if (seg.replace('.', '').length >= 15) return;
+        if (whole.replace('.', '').length >= 15) return;
         if (seg === '0') calcExpr = calcExpr.slice(0, -1);
     }
     calcExpr += d;
-    renderCalc();
-};
+});
 
-const calcOperator = (op) => {
+const calcOperator = (op) => calcEdit(() => {
     calcEchoExpr = '';
     calcJustEvaluated = false;
+    // Cursor justo antes de un operador: la tecla lo reemplaza
+    if (isCalcOp(calcTail[0]) && /[\d.%]$/.test(calcExpr)) calcTail = calcTail.slice(1);
     const last = calcLast();
     if (!calcExpr) {
         if (op === '-') calcExpr = '~';
@@ -1212,37 +1305,35 @@ const calcOperator = (op) => {
     } else {
         calcExpr += op;
     }
-    renderCalc();
-};
+});
 
-const calcPercent = () => {
+const calcPercent = () => calcEdit(() => {
     calcEchoExpr = '';
     calcJustEvaluated = false;
     if (calcLast() === '.') calcExpr = calcExpr.slice(0, -1);
     if (!/\d/.test(calcLast())) return;
     calcExpr += '%';
-    renderCalc();
-};
+});
 
-const calcToggleSign = () => {
+const calcToggleSign = () => calcEdit(() => {
     calcEchoExpr = '';
     calcJustEvaluated = false;
     const m = calcExpr.match(/(~?)([\d.]*%?)$/);
     const start = calcExpr.length - m[0].length;
     calcExpr = calcExpr.slice(0, start) + (m[1] ? '' : '~') + m[2];
-    renderCalc();
-};
+});
 
-const calcBackspace = () => {
+// Borra lo que está a la izquierda del cursor
+const calcBackspace = () => calcEdit(() => {
     calcEchoExpr = '';
     calcJustEvaluated = false;
     calcExpr = calcExpr.slice(0, -1);
-    renderCalc();
-};
+});
 
 const calcClear = () => {
     calcEchoExpr = '';
     calcJustEvaluated = false;
+    calcCursor = null;
     calcExpr = '';
     renderCalc();
 };
@@ -1267,15 +1358,29 @@ const calcEquals = () => {
     if (!/[+\-*/%]/.test(complete)) return; // un número solo no tiene nada que calcular
     const shown = formatExpr(complete);
     calcEchoExpr = `${shown} =`;
+    calcEchoRaw = complete;
     saveCalcHistoryEntry(shown, v);
     calcExpr = numToCalcExpr(v);
+    calcCursor = null;
     calcJustEvaluated = true;
     renderCalc();
     playCalcResult();
 };
 
-// Inserta un número (tasa, valor pegado): si ya hay un número delante, multiplica
+// Tras "=", tocar la operación de arriba la devuelve para corregirla
+const calcReopenEcho = () => {
+    if (!calcJustEvaluated || !calcEchoRaw) return;
+    calcExpr = calcEchoRaw;
+    calcEchoExpr = '';
+    calcCursor = null;
+    calcJustEvaluated = false;
+    renderCalc();
+};
+
+// Inserta un número (tasa, valor pegado): si ya hay un número delante, multiplica.
+// Siempre va al final, aunque el cursor esté en medio.
 const calcInsertNumber = (n) => {
+    calcCursor = null;
     calcEchoExpr = '';
     let s = numToCalcExpr(n);
     if (calcJustEvaluated) { calcExpr = ''; calcJustEvaluated = false; }
@@ -1301,6 +1406,7 @@ const calcRemoveToken = (token) => {
     if (idx > 0) tokens.splice(idx - 1, 2);
     else tokens.splice(0, tokens.length > 1 ? 2 : 1);
     calcExpr = tokens.join('');
+    calcCursor = null;
     calcEchoExpr = '';
     renderCalc();
     return true;
@@ -1326,15 +1432,19 @@ const renderCalcItems = () => {
         remove.className = 'calc-item-remove';
         remove.setAttribute('aria-label', 'Quitar');
         remove.textContent = '×';
-        remove.addEventListener('click', () => {
+        remove.addEventListener('click', (e) => {
+            e.stopPropagation();
             const parts = getCalcItems();
             if (!parts) return;
             parts.splice(idx, 1);
             calcExpr = parts.join('+');
+            calcCursor = null;
             calcEchoExpr = '';
             calcJustEvaluated = false;
             renderCalc();
         });
+        // Tocar el sumando lleva el cursor al final de ese número para corregirlo
+        chip.addEventListener('click', () => setCalcCursor(items.slice(0, idx + 1).join('+').length));
         chip.appendChild(remove);
         wrap.appendChild(chip);
     });
@@ -1414,8 +1524,10 @@ const renderCalcHistory = () => {
         row.append(expr, res);
         row.addEventListener('click', () => {
             calcExpr = numToCalcExpr(entry.value);
+            calcCursor = null;
             calcJustEvaluated = true;
             calcEchoExpr = `${entry.expr} =`;
+            calcEchoRaw = '';
             renderCalc();
         });
         wrap.appendChild(row);
@@ -1449,6 +1561,11 @@ const setupCalculator = () => {
             else calcDigit(k);
         });
     });
+
+    $('calc-main')?.addEventListener('click', (e) => {
+        if (calcExpr) setCalcCursor(calcCursorFromTap(e));
+    });
+    $('calc-expression')?.addEventListener('click', calcReopenEcho);
 
     $('calc-history-toggle')?.addEventListener('click', () => {
         setCalcHistoryVisible(!isShown($('calc-history-panel')));
@@ -1484,6 +1601,7 @@ const setupCalculator = () => {
         clearQuickActive();
         setAmount(v);
         calcExpr = '';
+        calcCursor = null;
         calcEchoExpr = '';
         calcJustEvaluated = false;
         closeOverlay('calc-sheet');
@@ -1501,6 +1619,8 @@ const setupCalculator = () => {
         else if (k === 'Enter' || k === '=') calcEquals();
         else if (k === 'Backspace') calcBackspace();
         else if (k === 'Delete') calcClear();
+        else if (k === 'ArrowLeft' && calcExpr) setCalcCursor((calcCursor ?? calcExpr.length) - 1);
+        else if (k === 'ArrowRight' && calcCursor !== null) setCalcCursor(calcCursor + 1);
         else return;
         e.preventDefault();
     });
@@ -2338,6 +2458,7 @@ const setupSettings = () => {
 //  NOVEDADES Y GUÍA DE USO
 // ══════════════════════════════════════════════════════════════
 const WHATS_NEW = [
+    { icon: 'text-cursor-input', title: 'Corrige la operación', desc: 'En la calculadora, toca cualquier cifra para poner el cursor ahí y borrar o escribir en ese punto, sin borrar todo. Después de "=", toca la operación de arriba para volver a editarla.' },
     { icon: 'arrow-left-right', title: 'Precios reales de compra y venta', desc: 'El equivalente en USDT usa el precio de Binance P2P para comprar o para vender, según lo que elijas.' },
     { icon: 'calendar', title: 'Tasa de mañana desde las 5 pm', desc: 'Cuando el BCV ya publicó la tasa del día siguiente, desde las 5 pm se usa sola. Toca "Hoy" si prefieres la vigente.' },
     { icon: 'calculator', title: 'Barra fija abajo', desc: 'La calculadora y el botón para instalar la app quedan siempre a mano en la parte inferior.' },

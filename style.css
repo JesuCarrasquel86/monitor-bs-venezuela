@@ -2654,3 +2654,38 @@ a.settings-row-btn {
     .calc-main.calc-swap,
     .calc-expression.calc-swap { animation: none; }
 }
+
+/* ── Calculadora: cursor para corregir en medio de la operación ── */
+.calc-main {
+    cursor: text;
+}
+
+/* Ancho neto cero (margen negativo) para que el texto no se mueva al aparecer */
+.calc-caret {
+    display: inline-block;
+    width: 2px;
+    height: 0.95em;
+    margin: 0 -1px;
+    vertical-align: -0.12em;
+    border-radius: 1px;
+    background: var(--accent);
+    animation: calcCaretBlink 1.05s step-end infinite;
+}
+
+@keyframes calcCaretBlink {
+    50% { opacity: 0; }
+}
+
+.calc-item,
+.calc-expression.is-editable {
+    cursor: pointer;
+}
+
+.calc-expression.is-editable {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .calc-caret { animation: none; }
+}
