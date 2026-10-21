@@ -25,6 +25,7 @@ const KEYS = {
     whatsNew: 'monitor-dolar-whats-new-seen',
     backfill: 'monitor-dolar-backfill',
     installDismissed: 'pwa-install-dismissed',
+    samsungHintDismissed: 'samsung-chrome-hint-dismissed',
 };
 
 // localStorage puede fallar (modo privado, cuota llena): nunca debe romper la app
@@ -1680,7 +1681,37 @@ const hideInstallBanner = () => {
     setTimeout(() => banner.classList.add('hidden'), 350);
 };
 
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isSamsungInternet = () => /SamsungBrowser/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent);
+
+// Abre la misma página en Chrome (si no está instalado, se queda en el navegador actual)
+const chromeIntentUrl = () => {
+    const { host, pathname, search, href } = window.location;
+    return `intent://${host}${pathname}${search}#Intent;scheme=https;package=com.android.chrome;`
+        + `S.browser_fallback_url=${encodeURIComponent(href)};end`;
+};
+
+// Samsung Internet genera su propio APK al instalar una PWA y, en Android 14+,
+// Play Protect lo bloquea ("se diseñó para una versión anterior de Android").
+// Desde Chrome la instalación funciona, así que ahí se guía al usuario.
+const setupSamsungInstallHint = () => {
+    window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
+    if (store.get(KEYS.samsungHintDismissed)) return;
+    setText('install-title', 'Instala la app desde Chrome');
+    setText('install-sub', 'Samsung Internet puede bloquear la instalación');
+    setText('btn-install', 'Abrir en Chrome');
+    $('install-banner')?.classList.remove('hidden');
+    $('btn-install')?.addEventListener('click', () => { window.location.href = chromeIntentUrl(); });
+    $('btn-install-dismiss')?.addEventListener('click', () => {
+        store.set(KEYS.samsungHintDismissed, '1');
+        hideInstallBanner();
+    });
+};
+
 const setupInstallBanner = () => {
+    if (isStandalone()) return;
+    if (isSamsungInternet()) { setupSamsungInstallHint(); return; }
+
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredInstallPrompt = e;
