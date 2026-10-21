@@ -4,7 +4,7 @@
 
 'use strict';
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.1.0';
 console.log(`monitor-bs-vz v${APP_VERSION} starting...`);
 
 // ── Claves de almacenamiento (se conservan las de versiones anteriores) ──
@@ -13,6 +13,7 @@ const KEYS = {
     theme: 'monitor-dolar-theme',
     accent: 'monitor-dolar-accent',
     history: 'monitor-dolar-history',
+    historicosAt: 'monitor-dolar-historicos-at',
     customRate: 'monitor-dolar-custom-rate',
     calcHistory: 'monitor-dolar-calc-history',
     gapThreshold: 'monitor-dolar-gap-threshold',
@@ -20,11 +21,13 @@ const KEYS = {
     notifications: 'notifications-enabled',
     view: 'monitor-dolar-view',
     currency: 'monitor-dolar-currency',
+    usdtMode: 'monitor-dolar-usdt-mode',
     share: 'monitor-dolar-share',
+    profiles: 'monitor-dolar-pay-profiles',
     onboarding: 'monitor-dolar-onboarding-done',
     whatsNew: 'monitor-dolar-whats-new-seen',
-    backfill: 'monitor-dolar-backfill',
     installDismissed: 'pwa-install-dismissed',
+    installed: 'pwa-installed',
     samsungHintDismissed: 'samsung-chrome-hint-dismissed',
 };
 
@@ -49,16 +52,21 @@ const store = {
 
 // ── Estado ────────────────────────────────────────────────────
 const DEFAULT_RATES = { bcv: 419.99, binance: 604.78, euro: 495.61 };
+const DOLARAPI = 'https://ve.dolarapi.com/v1';
+const HISTORY_DAYS = 120;
 
 let data = { ...DEFAULT_RATES, amount: 1 };
 let inputCurrency = 'usd';  // moneda en la que se escribe el monto: 'usd' | 'eur' | 'bs'
 let lastForeign = 'usd';    // última divisa usada, para volver desde Bs con el botón de dirección
 let isLoading = false;
-let rateDate = null;        // fecha oficial de la tasa BCV (Date)
+let rateDate = null;        // fecha oficial de la tasa BCV vigente (Date)
 let lastFetchAt = null;     // momento de la última consulta exitosa (Date)
 let hasFetchedOnce = false; // evita comparar la 1ra tasa real contra los valores placeholder
 let sessionPrev = null;     // tasas antes de la última consulta de esta sesión
-let prevRates = null;       // tasas del día anterior según el historial
+let prevRates = null;       // tasas anteriores según el historial
+let nextRates = null;       // tasa BCV del siguiente día hábil, si ya fue publicada
+let useNext = false;        // el usuario eligió calcular con la tasa del día siguiente
+let usdtMode = 'sell';      // 'sell' | 'buy' en Binance
 let lastUsdtNeeded = 0;
 let customRate = { enabled: false, name: 'Mi tasa', value: 0 };
 let viewMode = 'grid';
@@ -100,11 +108,15 @@ const toDateKey = (d) => {
 };
 
 const dateFromKey = (key) => new Date(`${key}T12:00:00`);
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
 const formatDayMonthYear = (d) =>
     `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 
 const formatLongDate = (d) => `${cap(d.toLocaleDateString('es-VE', { weekday: 'long' }))}, ${formatDayMonthYear(d)}`;
+
+const formatShortDay = (d) =>
+    `${cap(d.toLocaleDateString('es-VE', { weekday: 'short' }).replace('.', ''))} ${String(d.getDate()).padStart(2, '0')}`;
 
 const formatTime = (d) => d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -128,6 +140,12 @@ const parseLocaleNumber = (input) => {
     return parseFloat(s);
 };
 
+// ── Plataforma ────────────────────────────────────────────────
+const isAndroid = () => /Android/i.test(navigator.userAgent);
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isSamsungInternet = () => /SamsungBrowser/i.test(navigator.userAgent) && isAndroid();
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
 // ── DOM ───────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
@@ -141,16 +159,28 @@ const popElement = (id) => {
     el.classList.add('value-updated');
 };
 
+// Arma un párrafo con partes de texto y <strong>, sin usar innerHTML
+const fillRichText = (el, parts) => {
+    if (!el) return;
+    el.textContent = '';
+    parts.forEach((p) => {
+        if (typeof p === 'string') { el.append(p); return; }
+        const strong = document.createElement('strong');
+        strong.textContent = p.strong;
+        el.append(strong);
+    });
+};
+
 // ── Toast + portapapeles ──────────────────────────────────────
 let toastTimer = null;
-const showToast = (msg, isError = false) => {
+const showToast = (msg, isError = false, ms = 2200) => {
     const el = $('toast');
     if (!el) return;
     setText('toast-text', msg);
     el.classList.toggle('error', isError);
     el.classList.remove('hidden');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
 };
 
 const copyText = async (text, msg) => {
@@ -176,9 +206,14 @@ const readClipboardNumber = async () => {
 };
 
 // ── Cálculos ──────────────────────────────────────────────────
+// Tasas con las que se calcula: las de hoy, o las del día siguiente si se eligió
+const rates = () => (useNext && nextRates
+    ? { bcv: nextRates.bcv, euro: nextRates.euro || data.euro, binance: data.binance }
+    : { bcv: data.bcv, euro: data.euro, binance: data.binance });
+
 const isBsMode = () => inputCurrency === 'bs';
-const officialRate = () => (inputCurrency === 'eur' ? data.euro : data.bcv);
-const getRate = (key) => (key === 'custom' ? customRate.value : data[key]);
+const officialRate = () => (inputCurrency === 'eur' ? rates().euro : rates().bcv);
+const getRate = (key) => (key === 'custom' ? customRate.value : rates()[key]);
 const rateTitle = (key) => (key === 'custom' ? (customRate.name || 'Personalizada') : RATE_DEFS[key].title);
 const chipTitle = (key) => (key === 'custom' ? (customRate.name || 'Mía').slice(0, 12) : RATE_DEFS[key].chip);
 
@@ -193,11 +228,29 @@ const formatCardTotal = (key) => (isBsMode() ? formatUsdt(cardTotal(key)) : form
 
 const amountLabel = () => `${formatBs(data.amount)} ${CURRENCY[inputCurrency].sym}`;
 
-const gapPercent = (bcv = data.bcv, binance = data.binance) => (bcv > 0 ? ((binance - bcv) / bcv) * 100 : 0);
+// Monto expresado en Bs a tasa oficial (lo que se quiere cubrir)
+const amountInBsOfficial = () => (isBsMode() ? data.amount : data.amount * officialRate());
+
+const gapPercent = (bcv = rates().bcv, binance = rates().binance) => (bcv > 0 ? ((binance - bcv) / bcv) * 100 : 0);
 
 const pctChange = (prev, curr) => (prev > 0 && curr > 0 ? ((curr - prev) / prev) * 100 : null);
 
-const prevFor = (key) => (prevRates && prevRates[key]) || (sessionPrev && sessionPrev[key]) || null;
+const prevFor = (key) => {
+    // Con la tasa de mañana, "Antes" es la vigente hoy
+    if (useNext && nextRates && (key === 'bcv' || key === 'euro')) return data[key];
+    return (prevRates && prevRates[key]) || (sessionPrev && sessionPrev[key]) || null;
+};
+
+const nextDayLabel = () => {
+    if (!nextRates) return '';
+    return nextRates.key === toDateKey(addDays(new Date(), 1)) ? 'Mañana' : formatShortDay(nextRates.date);
+};
+
+const officialRatePhrase = () => {
+    if (!(useNext && nextRates)) return 'a tasa BCV';
+    const label = nextDayLabel();
+    return label === 'Mañana' ? 'a tasa BCV de mañana' : `a tasa BCV del ${label}`;
+};
 
 // ── Persistencia de tasas ─────────────────────────────────────
 const saveToStorage = () => {
@@ -221,55 +274,72 @@ const loadFromStorage = () => {
 };
 
 // ── Historial diario de tasas ─────────────────────────────────
-const saveHistoryEntry = (dateKey, entry) => {
+// { 'YYYY-MM-DD': { bcv?, euro?, binance? } }. El BCV solo publica días hábiles.
+const mergeHistory = (updates) => {
     const history = store.getJSON(KEYS.history, {}) || {};
-    history[dateKey] = { ...entry, savedAt: new Date().toISOString() };
-    // Solo los últimos 14 días para no llenar localStorage
+    Object.entries(updates).forEach(([key, values]) => {
+        history[key] = { ...(history[key] || {}), ...values };
+    });
     const trimmed = {};
-    Object.keys(history).sort().slice(-14).forEach((k) => { trimmed[k] = history[k]; });
+    Object.keys(history).sort().slice(-HISTORY_DAYS).forEach((k) => { trimmed[k] = history[k]; });
     store.setJSON(KEYS.history, trimmed);
 };
 
 const getAllHistoryEntries = () => {
     const history = store.getJSON(KEYS.history, {}) || {};
+    const num = (v) => (typeof v === 'number' && v > 0 ? v : null);
     return Object.entries(history)
-        .map(([date, v]) => ({ date, bcv: v.bcv, binance: v.binance, euro: v.euro }))
-        .filter((e) => e.bcv && e.binance && e.euro)
+        .map(([date, v]) => ({ date, bcv: num(v && v.bcv), binance: num(v && v.binance), euro: num(v && v.euro) }))
+        .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date) && (e.bcv || e.binance || e.euro))
         .sort((a, b) => b.date.localeCompare(a.date));
 };
 
-const refreshPrevRates = () => {
-    const currentKey = toDateKey(rateDate || new Date());
-    prevRates = getAllHistoryEntries().find((e) => e.date < currentKey) || null;
+// Calcula "Antes" (tasa previa) y si ya hay tasa del día siguiente publicada
+const refreshDerivedRates = () => {
+    const entries = getAllHistoryEntries();
+    const officialKey = toDateKey(rateDate || new Date());
+    const todayKey = toDateKey(new Date());
+    const findPrev = (field, before) => {
+        const e = entries.find((x) => x.date < before && x[field]);
+        return e ? e[field] : null;
+    };
+    prevRates = {
+        bcv: findPrev('bcv', officialKey),
+        euro: findPrev('euro', officialKey),
+        binance: findPrev('binance', todayKey),
+    };
+
+    const future = entries.filter((e) => e.date > officialKey && e.bcv).sort((a, b) => a.date.localeCompare(b.date))[0];
+    nextRates = future ? { key: future.date, date: dateFromKey(future.date), bcv: future.bcv, euro: future.euro } : null;
+    if (!nextRates) useNext = false;
 };
 
-// Completa el historial local con el guardado en Cloudflare KV, para que
-// "Antes" y el Historial tengan datos desde el primer día de uso.
-const backfillHistory = async () => {
-    const today = toDateKey(new Date());
-    if (store.get(KEYS.backfill) === today) return;
-    try {
-        const res = await fetch('/api/history', { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) return;
-        const { available = [] } = await res.json();
-        const local = new Set(getAllHistoryEntries().map((e) => e.date));
-        const missing = available.filter((d) => !local.has(d)).slice(0, 14);
-        await Promise.all(missing.map(async (d) => {
-            try {
-                const r = await fetch(`/api/history?date=${encodeURIComponent(d)}`, { signal: AbortSignal.timeout(8000) });
-                if (!r.ok) return;
-                const j = await r.json();
-                if (j.bcv && j.binance && j.euro) saveHistoryEntry(d, { bcv: j.bcv, binance: j.binance, euro: j.euro });
-            } catch (e) { }
-        }));
-        store.set(KEYS.backfill, today);
-        if (missing.length) {
-            refreshPrevRates();
-            updateUI();
-        }
-    } catch (e) {
-        console.warn('[backfillHistory]', e.message);
-    }
+// dolarapi publica el histórico diario (incluida la tasa BCV del día siguiente
+// apenas sale). Se sincroniza cada 30 min como máximo.
+const syncHistoricos = async () => {
+    const last = Number(store.get(KEYS.historicosAt)) || 0;
+    if (Date.now() - last < 30 * 60 * 1000) return false;
+    const get = (path) => fetch(`${DOLARAPI}/historicos/${path}`, { signal: AbortSignal.timeout(12000) })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []);
+    const [usd, eur, par] = await Promise.all([get('dolares/oficial'), get('euros/oficial'), get('dolares/paralelo')]);
+    if (![usd, eur, par].some((a) => Array.isArray(a) && a.length)) return false;
+
+    const cutoff = toDateKey(addDays(new Date(), -HISTORY_DAYS));
+    const updates = {};
+    const add = (list, field) => {
+        if (!Array.isArray(list)) return;
+        list.forEach((e) => {
+            if (!e || typeof e.fecha !== 'string' || e.fecha < cutoff || !(e.promedio > 0)) return;
+            updates[e.fecha] = { ...(updates[e.fecha] || {}), [field]: e.promedio };
+        });
+    };
+    add(usd, 'bcv');
+    add(eur, 'euro');
+    add(par, 'binance');
+    mergeHistory(updates);
+    store.set(KEYS.historicosAt, String(Date.now()));
+    return true;
 };
 
 // ── Tasa personalizada ────────────────────────────────────────
@@ -348,17 +418,11 @@ const updateConverterChrome = () => {
         b.classList.toggle('is-selected', b.dataset.currency === inputCurrency);
     });
 
-    const hint = $('conv-hint');
-    if (hint) {
-        const value = isBsMode()
-            ? `${formatUsdt(data.bcv > 0 ? data.amount / data.bcv : 0)} $`
-            : `${formatBs(data.amount * officialRate())} Bs`;
-        hint.innerHTML = '';
-        hint.append('= ');
-        const strong = document.createElement('strong');
-        strong.textContent = value;
-        hint.append(strong, ' a tasa BCV');
-    }
+    const r = rates();
+    const value = isBsMode()
+        ? `${formatUsdt(r.bcv > 0 ? data.amount / r.bcv : 0)} $`
+        : `${formatBs(data.amount * officialRate())} Bs`;
+    fillRichText($('conv-hint'), ['= ', { strong: value }, ` ${officialRatePhrase()}`]);
 };
 
 const setupConverter = () => {
@@ -392,7 +456,7 @@ const setupConverter = () => {
         if (!Number.isFinite(n)) return;
         e.preventDefault();
         clearQuickActive();
-        setAmount(n);
+        setAmount(Math.abs(n));
     });
 
     document.querySelectorAll('.quick-btn').forEach((btn) => {
@@ -422,8 +486,9 @@ const setupConverter = () => {
     $('btn-direction')?.addEventListener('click', () => setCurrency(isBsMode() ? lastForeign : 'bs'));
 
     $('act-copy')?.addEventListener('click', () => {
+        const r = rates();
         if (isBsMode()) {
-            copyText(formatUsdt(data.bcv > 0 ? data.amount / data.bcv : 0), 'Monto en $ a tasa BCV copiado');
+            copyText(formatUsdt(r.bcv > 0 ? data.amount / r.bcv : 0), 'Monto en $ a tasa BCV copiado');
         } else {
             copyText(formatBs(data.amount * officialRate()), 'Monto a tasa BCV copiado');
         }
@@ -440,8 +505,8 @@ const setupConverter = () => {
     $('act-clear')?.addEventListener('click', () => {
         clearQuickActive();
         setAmount(0);
-        const input2 = $('input-amount');
-        if (input2) { input2.value = ''; input2.focus(); }
+        const field = $('input-amount');
+        if (field) { field.value = ''; field.focus(); }
     });
 };
 
@@ -511,6 +576,7 @@ const renderChange = (id, value, unit) => {
 const cardDateText = (key) => {
     if (key === 'custom') return 'Tasa definida por ti';
     if (key === 'binance') return lastFetchAt ? formatRelative(lastFetchAt) : '';
+    if (useNext && nextRates) return formatLongDate(nextRates.date);
     const d = rateDate || lastFetchAt;
     return d ? formatLongDate(d) : '';
 };
@@ -532,21 +598,23 @@ const renderRateCard = (key) => {
 };
 
 const renderGapCard = (gapAlert) => {
+    const r = rates();
     const gap = gapPercent();
     setText('title-gap', 'Brecha');
     setText('total-gap', isLoading ? '--' : NF2.format(gap));
     setText('suffix-gap', '%');
 
     if (isBsMode()) {
-        const diffUsd = data.bcv > 0 && data.binance > 0 ? data.amount / data.bcv - data.amount / data.binance : 0;
+        const diffUsd = r.bcv > 0 && r.binance > 0 ? data.amount / r.bcv - data.amount / r.binance : 0;
         setText('line1-gap', `${formatUsdt(diffUsd)} $ de diferencia`);
     } else {
-        setText('line1-gap', `+${formatBs((data.binance - data.bcv) * data.amount)} Bs de diferencia`);
+        setText('line1-gap', `+${formatBs((r.binance - r.bcv) * data.amount)} Bs de diferencia`);
     }
     setText('line2-gap', 'Binance vs. BCV');
 
+    // Brecha anterior: con la tasa de mañana se compara contra la de hoy
     const pb = prevFor('bcv');
-    const pp = prevFor('binance');
+    const pp = useNext ? r.binance : prevFor('binance');
     const prevGap = pb && pp ? gapPercent(pb, pp) : null;
     setText('line3-gap', prevGap !== null ? `Antes: ${NF2.format(prevGap)}%` : '');
 
@@ -564,11 +632,14 @@ const renderGapCard = (gapAlert) => {
 const updateRateDateBadge = () => {
     const badge = $('rate-date-badge');
     if (!badge) return;
+    // Si hay tasa del día siguiente, el selector Hoy/Mañana ya indica el día
+    if (nextRates) {
+        badge.textContent = '';
+        return;
+    }
     if (rateDate) {
         const isToday = toDateKey(rateDate) === toDateKey(new Date());
-        badge.textContent = isToday
-            ? 'Hoy'
-            : `${cap(rateDate.toLocaleDateString('es-VE', { weekday: 'short' }))} ${formatDayMonthYear(rateDate).slice(0, 5)}`;
+        badge.textContent = isToday ? 'Hoy' : formatShortDay(rateDate);
         badge.classList.toggle('is-historical', !isToday);
     } else {
         badge.textContent = isLoading ? '...' : '';
@@ -576,22 +647,110 @@ const updateRateDateBadge = () => {
     }
 };
 
+const syncDaySeg = () => {
+    const seg = $('day-seg');
+    if (!seg) return;
+    seg.classList.toggle('hidden', !nextRates);
+    if (!nextRates) return;
+    const todayBtn = seg.querySelector('[data-day="today"]');
+    if (todayBtn) {
+        todayBtn.textContent = rateDate && toDateKey(rateDate) !== toDateKey(new Date()) ? formatShortDay(rateDate) : 'Hoy';
+    }
+    setText('day-next-label', nextDayLabel());
+    seg.querySelectorAll('[data-day]').forEach((b) => b.classList.toggle('is-selected', (b.dataset.day === 'next') === useNext));
+};
+
+const setupDaySeg = () => {
+    document.querySelectorAll('#day-seg [data-day]').forEach((b) => {
+        b.addEventListener('click', () => {
+            useNext = b.dataset.day === 'next' && !!nextRates;
+            updateUI();
+            if (useNext) showToast(`Calculando con la tasa BCV del ${formatLongDate(nextRates.date).toLowerCase()}`, false, 2600);
+        });
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  EQUIVALENTE EN USDT (vender / comprar en Binance)
+// ══════════════════════════════════════════════════════════════
+const BINANCE_P2P = {
+    sell: 'https://p2p.binance.com/trade/sell/USDT?fiat=VES&payment=all-payments',
+    buy: 'https://p2p.binance.com/trade/all-payments/USDT?fiat=VES',
+};
+
+// En Android, un intent explícito abre la app de Binance (com.binance.dev);
+// si no está instalada, el navegador abre la web de P2P.
+const binanceHref = () => {
+    const url = BINANCE_P2P[usdtMode];
+    if (!isAndroid()) return url;
+    const u = new URL(url);
+    return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.binance.dev;`
+        + `S.browser_fallback_url=${encodeURIComponent(url)};end`;
+};
+
+const updateUsdtCard = () => {
+    const r = rates();
+    const bsAmount = amountInBsOfficial();
+    const usdt = r.binance > 0 ? bsAmount / r.binance : 0;
+    lastUsdtNeeded = usdt;
+    setText('eq-usdt', isLoading ? '--' : `${formatUsdt(usdt)} USDT`);
+
+    const what = isBsMode() ? '' : ` (tu monto ${officialRatePhrase()})`;
+    fillRichText($('usdt-sub'), usdtMode === 'sell'
+        ? ['Lo que debes vender en Binance para recibir ', { strong: `${formatBs(bsAmount)} Bs` }, `${what}.`]
+        : ['Lo que compras en Binance con ', { strong: `${formatBs(bsAmount)} Bs` }, `${what}.`]);
+
+    document.querySelectorAll('#usdt-mode [data-mode]').forEach((b) => b.classList.toggle('is-selected', b.dataset.mode === usdtMode));
+    setText('binance-btn-text', usdtMode === 'sell' ? 'Copiar y vender en Binance P2P' : 'Copiar y comprar en Binance P2P');
+
+    const link = $('btn-binance-p2p');
+    if (link) {
+        link.href = binanceHref();
+        if (isAndroid()) link.removeAttribute('target');
+        else link.setAttribute('target', '_blank');
+    }
+};
+
+const setupUsdtCard = () => {
+    usdtMode = store.get(KEYS.usdtMode) === 'buy' ? 'buy' : 'sell';
+
+    document.querySelectorAll('#usdt-mode [data-mode]').forEach((b) => {
+        b.addEventListener('click', () => {
+            usdtMode = b.dataset.mode === 'buy' ? 'buy' : 'sell';
+            store.set(KEYS.usdtMode, usdtMode);
+            updateUsdtCard();
+        });
+    });
+
+    $('btn-copy-usdt')?.addEventListener('click', async () => {
+        if (!(lastUsdtNeeded > 0)) return;
+        const ok = await copyText(lastUsdtNeeded.toFixed(2), `USDT copiado: ${lastUsdtNeeded.toFixed(2)}`);
+        const btn = $('btn-copy-usdt');
+        if (ok && btn) {
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 1500);
+        }
+    });
+
+    // Es un <a>: la navegación la hace el navegador (así Android/iOS pueden abrir
+    // la app). Aquí solo se copia el monto, con punto decimal como lo pide Binance.
+    $('btn-binance-p2p')?.addEventListener('click', () => {
+        if (lastUsdtNeeded > 0) {
+            navigator.clipboard.writeText(lastUsdtNeeded.toFixed(2)).catch(() => { });
+        }
+    });
+};
+
 // ── Render general ────────────────────────────────────────────
 const updateUI = () => {
     updateConverterChrome();
-
-    // Diferencia a tasa: USDT a vender para cubrir el monto a tasa oficial
-    const usdt = data.binance > 0
-        ? (isBsMode() ? data.amount / data.binance : (data.amount * officialRate()) / data.binance)
-        : 0;
-    lastUsdtNeeded = usdt;
-    setText('eq-usdt', isLoading ? '--' : `${formatUsdt(usdt)} USDT`);
-    setText('sub-amount', amountLabel());
+    updateUsdtCard();
 
     const gapAlert = isLoading ? { exceeded: false } : checkGapAlert(gapPercent());
     ['bcv', 'euro', 'binance', 'custom'].forEach(renderRateCard);
     renderGapCard(gapAlert);
     updateRateDateBadge();
+    syncDaySeg();
 
     if (!isLoading) {
         CARD_ORDER.forEach((k) => popElement(`total-${k}`));
@@ -612,7 +771,10 @@ const openOverlay = (id) => {
     const el = $(id);
     if (!el || !el.classList.contains('hidden')) return;
     toggleCurrencyMenu(false);
+    suspendTourIfActive();
     if (openHooks[id]) openHooks[id]();
+    // La última hoja abierta siempre queda encima, sin importar su orden en el HTML
+    el.style.zIndex = String(100 + openStack.length);
     el.classList.remove('hidden');
     el.setAttribute('aria-hidden', 'false');
     openStack.push(id);
@@ -625,14 +787,63 @@ const closeOverlay = (id) => {
     if (!el || el.classList.contains('hidden')) return;
     el.classList.add('hidden');
     el.setAttribute('aria-hidden', 'true');
+    el.style.zIndex = '';
+    const sheet = el.querySelector('.sheet');
+    if (sheet) sheet.style.transform = '';
     const i = openStack.lastIndexOf(id);
     if (i > -1) openStack.splice(i, 1);
     if (!openStack.length) document.body.classList.remove('no-scroll');
     document.querySelectorAll(`[data-opens="${id}"]`).forEach((b) => b.classList.remove('is-active'));
     if (closeHooks[id]) closeHooks[id]();
+    if (!openStack.length) resumeTourIfSuspended();
 };
 
 const closeAllOverlays = () => { while (topOverlay()) closeOverlay(topOverlay()); };
+
+// Arrastrar la barrita (o la cabecera) hacia abajo cierra la hoja
+const setupSheetDrag = () => {
+    document.querySelectorAll('.sheet-overlay').forEach((overlay) => {
+        const sheet = overlay.querySelector('.sheet');
+        if (!sheet) return;
+        let startY = null;
+        let startT = 0;
+        let dy = 0;
+
+        const onDown = (e) => {
+            if (e.button !== undefined && e.button !== 0) return;
+            if (e.target.closest('button, input, select, a, label')) return;
+            startY = e.clientY;
+            startT = performance.now();
+            dy = 0;
+            sheet.classList.add('is-dragging');
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+        };
+        const onMove = (e) => {
+            if (startY === null) return;
+            dy = Math.max(0, e.clientY - startY);
+            sheet.style.transform = `translateY(${dy}px)`;
+        };
+        const onUp = () => {
+            if (startY === null) return;
+            const speed = dy / Math.max(1, performance.now() - startT);
+            startY = null;
+            sheet.classList.remove('is-dragging');
+            if (dy > 110 || (dy > 30 && speed > 0.6)) {
+                sheet.style.transform = 'translateY(100%)';
+                setTimeout(() => closeOverlay(overlay.id), 180);
+            } else {
+                sheet.style.transform = '';
+            }
+        };
+
+        sheet.querySelectorAll('.sheet-handle, .sheet-header').forEach((zone) => {
+            zone.addEventListener('pointerdown', onDown);
+            zone.addEventListener('pointermove', onMove);
+            zone.addEventListener('pointerup', onUp);
+            zone.addEventListener('pointercancel', onUp);
+        });
+    });
+};
 
 const setupOverlays = () => {
     document.querySelectorAll('[data-opens]').forEach((btn) => {
@@ -649,6 +860,8 @@ const setupOverlays = () => {
         if (!$('currency-menu')?.classList.contains('hidden')) { toggleCurrencyMenu(false); return; }
         if (topOverlay()) closeOverlay(topOverlay());
     });
+
+    setupSheetDrag();
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -734,6 +947,12 @@ const renderCalc = () => {
     else main = groupTyped(calcExpr);
     setText('calc-main', main);
     renderCalcItems();
+
+    // Las tasas que ya están en la operación se marcan (tocarlas otra vez las quita)
+    const tokens = calcJustEvaluated ? [] : calcTokenize(calcExpr);
+    document.querySelectorAll('#calc-chips-block .rate-chip').forEach((chip) => {
+        chip.classList.toggle('is-selected', tokens.includes(chip.dataset.token));
+    });
 };
 
 const calcDigit = (d) => {
@@ -835,6 +1054,20 @@ const calcInsertNumber = (n) => {
     renderCalc();
 };
 
+// Quita la última aparición de un número junto al operador que lo une
+const calcRemoveToken = (token) => {
+    if (calcJustEvaluated) return false;
+    const tokens = calcTokenize(calcExpr);
+    const idx = tokens.lastIndexOf(token);
+    if (idx === -1) return false;
+    if (idx > 0) tokens.splice(idx - 1, 2);
+    else tokens.splice(0, tokens.length > 1 ? 2 : 1);
+    calcExpr = tokens.join('');
+    calcEchoExpr = '';
+    renderCalc();
+    return true;
+};
+
 // ── Modo "canasta": cada sumando como chip removible ──
 const getCalcItems = () => (/^[\d.]+(\+[\d.]+)+$/.test(calcExpr) ? calcExpr.split('+') : null);
 
@@ -868,7 +1101,7 @@ const renderCalcItems = () => {
     });
 };
 
-// ── Tasas listas para insertar ──
+// ── Tasas listas para insertar (o quitar) ──
 const renderCalcChips = () => {
     const current = $('calc-chips-current');
     const previous = $('calc-chips-prev');
@@ -879,10 +1112,13 @@ const renderCalcChips = () => {
         b.type = 'button';
         b.className = `rate-chip${isPrev ? ' is-prev' : ''}`;
         b.dataset.color = RATE_DEFS[key].color;
+        b.dataset.token = numToCalcExpr(value);
         b.innerHTML = '<span class="dot"></span><span class="lbl"></span><span class="val"></span>';
         b.querySelector('.lbl').textContent = isPrev ? `${chipTitle(key)} ant.` : chipTitle(key);
-        b.querySelector('.val').textContent = formatBs(value);
-        b.addEventListener('click', () => calcInsertNumber(value));
+        b.querySelector('.val').textContent = formatUsdt(value); // mismo valor que se inserta
+        b.addEventListener('click', () => {
+            if (!calcRemoveToken(b.dataset.token)) calcInsertNumber(value);
+        });
         return b;
     };
 
@@ -996,6 +1232,7 @@ const setupCalculator = () => {
         buildRateCards();
         updateUI();
         renderCalcChips();
+        renderCalc();
         showToast(`Guardada como "${customRate.name || 'Mi tasa'}"`);
     });
 
@@ -1032,13 +1269,7 @@ const setupCalculator = () => {
 // ══════════════════════════════════════════════════════════════
 //  HISTORIAL DE TASAS
 // ══════════════════════════════════════════════════════════════
-const getNDaysAgoKey = (n) => {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
-    return toDateKey(d);
-};
-
-let historyStart = getNDaysAgoKey(7);
+let historyStart = toDateKey(addDays(new Date(), -7));
 let historyEnd = toDateKey(new Date());
 
 const getFilteredHistoryEntries = () =>
@@ -1053,7 +1284,7 @@ const renderHistoryList = () => {
     if (!entries.length) {
         const empty = document.createElement('p');
         empty.className = 'history-empty';
-        empty.textContent = 'Sin registros en este rango. El historial se acumula con cada visita a la app.';
+        empty.textContent = 'Sin registros en este rango.';
         list.appendChild(empty);
         return;
     }
@@ -1062,6 +1293,7 @@ const renderHistoryList = () => {
         const cell = document.createElement('button');
         cell.type = 'button';
         cell.className = `history-cell${isValue ? ' is-value' : ''}`;
+        cell.disabled = !onClick;
         const l = document.createElement('span');
         l.className = 'history-cell-label';
         l.textContent = label;
@@ -1069,7 +1301,7 @@ const renderHistoryList = () => {
         v.className = 'history-cell-value';
         v.textContent = value;
         cell.append(l, v);
-        cell.addEventListener('click', onClick);
+        if (onClick) cell.addEventListener('click', onClick);
         return cell;
     };
 
@@ -1077,13 +1309,15 @@ const renderHistoryList = () => {
         const row = document.createElement('div');
         row.className = 'history-row';
         const d = dateFromKey(entry.date);
-        const dateText = `${cap(d.toLocaleDateString('es-VE', { weekday: 'short' }))} ${formatDayMonthYear(d)}`;
-        row.appendChild(makeCell('Fecha', dateText, false, () => copyText(formatDayMonthYear(d), 'Fecha copiada')));
+        row.appendChild(makeCell('Fecha', `${formatShortDay(d)}-${formatDayMonthYear(d).slice(3)}`, false,
+            () => copyText(formatDayMonthYear(d), 'Fecha copiada')));
 
         const values = document.createElement('div');
         values.className = 'history-values';
         [['bcv', 'USD'], ['euro', 'EUR'], ['binance', 'P2P']].forEach(([k, label]) => {
-            values.appendChild(makeCell(label, formatBs(entry[k]), true, () => copyText(formatBs(entry[k]), 'Tasa copiada')));
+            const v = entry[k];
+            values.appendChild(makeCell(label, v ? formatBs(v) : '--', true,
+                v ? () => copyText(formatBs(v), 'Tasa copiada') : null));
         });
         row.appendChild(values);
         list.appendChild(row);
@@ -1091,7 +1325,7 @@ const renderHistoryList = () => {
 };
 
 const updateHistoryResetVisibility = () => {
-    const isDefault = historyStart === getNDaysAgoKey(7) && historyEnd === toDateKey(new Date());
+    const isDefault = historyStart === toDateKey(addDays(new Date(), -7)) && historyEnd === toDateKey(new Date());
     $('history-reset')?.classList.toggle('hidden', isDefault);
 };
 
@@ -1109,12 +1343,12 @@ const downloadBlob = (blob, filename) => {
 const exportHistoryCSV = () => {
     const entries = getFilteredHistoryEntries();
     if (!entries.length) { showToast('No hay datos para exportar', true); return; }
-    const rows = [['Fecha', 'BCV (Bs)', 'Euro (Bs)', 'Binance P2P (Bs)'], ...entries.map((e) => [e.date, e.bcv, e.euro, e.binance])];
+    const rows = [['Fecha', 'BCV (Bs)', 'Euro (Bs)', 'Paralelo/P2P (Bs)'],
+        ...entries.map((e) => [e.date, e.bcv ?? '', e.euro ?? '', e.binance ?? ''])];
     downloadBlob(new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' }),
         `monitor-bs_historial_${historyStart}_${historyEnd}.csv`);
 };
 
-// ExcelJS (~950KB) se carga solo cuando alguien exporta a Excel
 const loadScriptOnce = (() => {
     const cache = {};
     return (src) => {
@@ -1131,6 +1365,7 @@ const loadScriptOnce = (() => {
     };
 })();
 
+// ExcelJS (~950KB) se carga solo cuando alguien exporta a Excel
 const exportHistoryXLSX = async () => {
     const entries = getFilteredHistoryEntries();
     if (!entries.length) { showToast('No hay datos para exportar', true); return; }
@@ -1142,7 +1377,7 @@ const exportHistoryXLSX = async () => {
             { header: 'Fecha', key: 'date', width: 14 },
             { header: 'BCV (Bs)', key: 'bcv', width: 14 },
             { header: 'Euro (Bs)', key: 'euro', width: 14 },
-            { header: 'Binance P2P (Bs)', key: 'binance', width: 16 },
+            { header: 'Paralelo/P2P (Bs)', key: 'binance', width: 18 },
         ];
         entries.forEach((e) => sheet.addRow(e));
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1166,7 +1401,7 @@ const setupHistory = () => {
     };
 
     start?.addEventListener('change', () => {
-        historyStart = start.value || getNDaysAgoKey(7);
+        historyStart = start.value || toDateKey(addDays(new Date(), -7));
         updateHistoryResetVisibility();
         renderHistoryList();
     });
@@ -1176,7 +1411,7 @@ const setupHistory = () => {
         renderHistoryList();
     });
     $('history-reset')?.addEventListener('click', () => {
-        historyStart = getNDaysAgoKey(7);
+        historyStart = toDateKey(addDays(new Date(), -7));
         historyEnd = toDateKey(new Date());
         if (start) start.value = historyStart;
         if (end) end.value = historyEnd;
@@ -1188,42 +1423,438 @@ const setupHistory = () => {
 };
 
 // ══════════════════════════════════════════════════════════════
-//  COMPARTIR (con datos de Pago Móvil / Transferencia)
+//  PERFILES DE PAGO
+// ══════════════════════════════════════════════════════════════
+const BANKS = [
+    ['0102', 'Banco de Venezuela'], ['0104', 'Venezolano de Crédito'], ['0105', 'Mercantil'],
+    ['0108', 'Provincial'], ['0114', 'Bancaribe'], ['0115', 'Exterior'], ['0128', 'Caroní'],
+    ['0134', 'Banesco'], ['0137', 'Sofitasa'], ['0138', 'Banco Plaza'], ['0151', 'BFC Fondo Común'],
+    ['0156', '100% Banco'], ['0157', 'DelSur'], ['0163', 'Banco del Tesoro'], ['0166', 'Banco Agrícola'],
+    ['0168', 'Bancrecer'], ['0169', 'Mi Banco'], ['0171', 'Banco Activo'], ['0172', 'Bancamiga'],
+    ['0174', 'Banplus'], ['0175', 'Bicentenario'], ['0177', 'Banfanb'], ['0178', 'N58 Banco Digital'],
+    ['0191', 'BNC'],
+];
+const PHONE_PREFIXES = ['0412', '0414', '0416', '0422', '0424', '0426'];
+const DOC_TYPES = ['V', 'E', 'J', 'G', 'P'];
+
+const bankName = (code) => (BANKS.find((b) => b[0] === code) || [])[1] || null;
+const bankLabel = (code) => (bankName(code) ? `${bankName(code)} (${code})` : code);
+
+let payProfiles = { list: [], defaultId: null };
+
+const newProfile = (fields = {}) => ({
+    id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    name: '',
+    type: 'pm',
+    docType: 'V',
+    docNumber: '',
+    phonePrefix: '0414',
+    phoneNumber: '',
+    banks: [],
+    holder: '',
+    account: '',
+    ...fields,
+});
+
+const sanitizeProfile = (p) => {
+    const out = { ...newProfile(), ...(p || {}) };
+    out.type = out.type === 'tr' ? 'tr' : 'pm';
+    out.docType = DOC_TYPES.includes(out.docType) ? out.docType : 'V';
+    out.phonePrefix = PHONE_PREFIXES.includes(out.phonePrefix) ? out.phonePrefix : '0414';
+    out.banks = Array.isArray(out.banks) ? out.banks.filter((c) => bankName(c)) : [];
+    ['name', 'docNumber', 'phoneNumber', 'holder', 'account'].forEach((k) => { out[k] = String(out[k] || ''); });
+    return out;
+};
+
+const saveProfiles = () => store.setJSON(KEYS.profiles, payProfiles);
+
+const getProfile = (id) => payProfiles.list.find((p) => p.id === id) || null;
+
+// v3.0 guardaba los datos de pago como texto libre en la hoja de compartir:
+// se convierten en perfiles para no perderlos
+const migrateLegacyShareData = () => {
+    const legacy = store.getJSON(KEYS.share, null);
+    if (!legacy || legacy.migrated || payProfiles.list.length) return;
+    const pm = legacy.pm || {};
+    const tr = legacy.tr || {};
+    const parseDoc = (s = '') => {
+        const m = String(s).trim().match(/^([VEJGP])[-\s.]*([\d.]+)$/i);
+        return m ? { docType: m[1].toUpperCase(), docNumber: m[2].replace(/\./g, '') } : { docNumber: String(s).replace(/\D/g, '') };
+    };
+    const matchBanks = (s = '') => {
+        const t = String(s).trim().toLowerCase();
+        if (!t) return [];
+        const code = (t.match(/\d{4}/) || [])[0];
+        const b = BANKS.find(([c, n]) => c === code || n.toLowerCase().includes(t) || t.includes(n.toLowerCase()));
+        return b ? [b[0]] : [];
+    };
+    const created = [];
+    if (pm.bank || pm.phone || pm.id) {
+        const digits = String(pm.phone || '').replace(/\D/g, '');
+        const prefix = digits.slice(0, 4);
+        const hasPrefix = PHONE_PREFIXES.includes(prefix);
+        created.push(newProfile({
+            name: 'Pago Móvil', type: 'pm', ...parseDoc(pm.id),
+            phonePrefix: hasPrefix ? prefix : '0414',
+            phoneNumber: (hasPrefix ? digits.slice(4) : digits).slice(-7),
+            banks: matchBanks(pm.bank),
+        }));
+    }
+    if (tr.account || tr.holder || tr.id) {
+        created.push(newProfile({
+            name: 'Transferencia', type: 'tr', ...parseDoc(tr.id),
+            account: String(tr.account || '').replace(/\D/g, ''),
+            holder: String(tr.holder || ''),
+        }));
+    }
+    if (created.length) {
+        payProfiles.list = created.map(sanitizeProfile);
+        payProfiles.defaultId = payProfiles.list[0].id;
+        saveProfiles();
+    }
+    store.setJSON(KEYS.share, { ...legacy, migrated: true });
+};
+
+const loadProfiles = () => {
+    const saved = store.getJSON(KEYS.profiles, null);
+    if (saved && Array.isArray(saved.list)) {
+        payProfiles.list = saved.list.map(sanitizeProfile);
+        payProfiles.defaultId = getProfile(saved.defaultId) ? saved.defaultId : (payProfiles.list[0]?.id || null);
+    }
+    migrateLegacyShareData();
+};
+
+const formatPhone = (p) => `${p.phonePrefix}-${p.phoneNumber}`;
+const formatDoc = (p) => `${p.docType}-${p.docNumber}`;
+const docLabel = (p) => (['J', 'G'].includes(p.docType) ? 'RIF' : 'Cédula');
+
+const profileSummary = (p) => {
+    if (p.type === 'pm') {
+        const banks = p.banks.length === 1 ? bankName(p.banks[0]) : (p.banks.length ? `${p.banks.length} bancos` : null);
+        return ['Pago Móvil', banks, p.phoneNumber ? formatPhone(p) : null].filter(Boolean).join(' · ');
+    }
+    return ['Transferencia', bankName(p.account.slice(0, 4)), p.account ? `•••• ${p.account.slice(-4)}` : null]
+        .filter(Boolean).join(' · ');
+};
+
+const profileLines = (p) => {
+    if (p.type === 'pm') {
+        const lines = ['Datos para Pago Móvil'];
+        if (p.banks.length === 1) lines.push(`Banco: ${bankLabel(p.banks[0])}`);
+        else if (p.banks.length > 1) lines.push(`Bancos: ${p.banks.map(bankLabel).join(', ')}`);
+        if (p.phoneNumber) lines.push(`Teléfono: ${formatPhone(p)}`);
+        if (p.docNumber) lines.push(`${docLabel(p)}: ${formatDoc(p)}`);
+        return lines;
+    }
+    const lines = ['Datos para Transferencia'];
+    const code = p.account.slice(0, 4);
+    if (bankName(code)) lines.push(`Banco: ${bankLabel(code)}`);
+    if (p.account) lines.push(`Cuenta: ${p.account}`);
+    if (p.holder) lines.push(`Titular: ${p.holder}`);
+    if (p.docNumber) lines.push(`${docLabel(p)}: ${formatDoc(p)}`);
+    return lines;
+};
+
+const makeEmptyCard = (icon, text, buttonText, onClick) => {
+    const card = document.createElement('div');
+    card.className = 'empty-card';
+    card.innerHTML = `<i data-lucide="${icon}"></i><p></p>`;
+    card.querySelector('p').textContent = text;
+    if (buttonText) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-btn';
+        btn.innerHTML = '<i data-lucide="plus" class="ic-xs"></i>';
+        btn.append(buttonText);
+        btn.addEventListener('click', onClick);
+        card.appendChild(btn);
+    }
+    return card;
+};
+
+const renderProfilesList = () => {
+    const list = $('profiles-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!payProfiles.list.length) {
+        list.appendChild(makeEmptyCard('credit-card', 'Aún no tienes perfiles de pago guardados.', 'Crear el primero', () => openProfileEditor(null)));
+        refreshIcons();
+        return;
+    }
+    payProfiles.list.forEach((p) => {
+        const row = document.createElement('div');
+        row.className = 'profile-row';
+
+        const star = document.createElement('button');
+        star.type = 'button';
+        star.className = `icon-btn profile-star${p.id === payProfiles.defaultId ? ' is-default' : ''}`;
+        star.setAttribute('aria-label', 'Usar por defecto');
+        star.title = 'Usar por defecto';
+        star.innerHTML = '<i data-lucide="star" class="ic"></i>';
+        star.addEventListener('click', () => {
+            payProfiles.defaultId = p.id;
+            saveProfiles();
+            renderProfilesList();
+            renderShareProfiles();
+        });
+
+        const main = document.createElement('button');
+        main.type = 'button';
+        main.className = 'profile-main';
+        main.innerHTML = '<span class="select-row-title"></span><span class="select-row-sub"></span>';
+        main.querySelector('.select-row-title').textContent = p.name || 'Personal';
+        main.querySelector('.select-row-sub').textContent = profileSummary(p);
+        main.addEventListener('click', () => openProfileEditor(p));
+
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'icon-btn';
+        edit.setAttribute('aria-label', 'Editar');
+        edit.innerHTML = '<i data-lucide="pencil" class="ic-sm"></i>';
+        edit.addEventListener('click', () => openProfileEditor(p));
+
+        row.append(star, main, edit);
+        list.appendChild(row);
+    });
+    refreshIcons();
+};
+
+// ── Editor de perfil ──
+let editingProfile = null;
+let editingIsNew = false;
+let deleteArmedUntil = 0;
+
+const editorSetType = (type) => {
+    if (!editingProfile) return;
+    editingProfile.type = type === 'tr' ? 'tr' : 'pm';
+    document.querySelectorAll('#profile-type [data-type]').forEach((b) => {
+        const sel = b.dataset.type === editingProfile.type;
+        b.classList.toggle('is-selected', sel);
+        b.setAttribute('aria-selected', String(sel));
+    });
+    document.querySelectorAll('#profile-editor [data-for]').forEach((el) => {
+        el.classList.toggle('hidden', el.dataset.for !== editingProfile.type);
+    });
+};
+
+const editorRenderBanks = () => {
+    if (!editingProfile) return;
+    setText('pf-banks-summary', editingProfile.banks.length
+        ? editingProfile.banks.map((c) => bankName(c)).join(', ')
+        : 'Ninguno');
+    const list = $('pf-banks-list');
+    if (!list || list.classList.contains('hidden')) return;
+    list.innerHTML = '';
+    BANKS.forEach(([code, name]) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        const selected = editingProfile.banks.includes(code);
+        item.className = `bank-item${selected ? ' is-selected' : ''}`;
+        item.setAttribute('aria-pressed', String(selected));
+        item.innerHTML = '<span class="bank-code"></span><span class="bank-name"></span>'
+            + '<span class="select-check"><i data-lucide="check" class="ic-xs"></i></span>';
+        item.querySelector('.bank-code').textContent = code;
+        item.querySelector('.bank-name').textContent = name;
+        item.addEventListener('click', () => {
+            const i = editingProfile.banks.indexOf(code);
+            if (i > -1) editingProfile.banks.splice(i, 1);
+            else editingProfile.banks.push(code);
+            editorRenderBanks();
+        });
+        list.appendChild(item);
+    });
+    refreshIcons();
+};
+
+const editorUpdateAccountHint = () => {
+    const hint = $('pf-account-bank');
+    if (!hint || !editingProfile) return;
+    const digits = editingProfile.account;
+    const name = digits.length >= 4 ? bankName(digits.slice(0, 4)) : null;
+    if (!digits) hint.textContent = 'Los primeros 4 dígitos indican el banco';
+    else if (name) hint.textContent = `${name} · ${digits.length}/20 dígitos`;
+    else hint.textContent = `${digits.length}/20 dígitos`;
+    hint.classList.toggle('is-ok', !!name && digits.length === 20);
+};
+
+const setDeleteLabel = (text) => {
+    const btn = $('btn-profile-delete');
+    if (btn && btn.lastChild) btn.lastChild.textContent = text;
+};
+
+const openProfileEditor = (profile) => {
+    editingIsNew = !profile;
+    editingProfile = profile ? sanitizeProfile(JSON.parse(JSON.stringify(profile))) : newProfile();
+    deleteArmedUntil = 0;
+    setText('profile-editor-title', editingIsNew ? 'Nuevo perfil' : 'Editar perfil');
+    $('pf-name').value = editingProfile.name;
+    $('pf-doc-type').value = editingProfile.docType;
+    $('pf-doc').value = editingProfile.docNumber;
+    $('pf-phone-prefix').value = editingProfile.phonePrefix;
+    $('pf-phone').value = editingProfile.phoneNumber;
+    $('pf-holder').value = editingProfile.holder;
+    $('pf-account').value = editingProfile.account;
+    $('pf-banks-list')?.classList.add('hidden');
+    $('pf-banks-toggle')?.setAttribute('aria-expanded', 'false');
+    $('btn-profile-delete')?.classList.toggle('hidden', editingIsNew);
+    setDeleteLabel('Eliminar perfil');
+    editorSetType(editingProfile.type);
+    editorRenderBanks();
+    editorUpdateAccountHint();
+    openOverlay('profile-editor');
+};
+
+const saveEditingProfile = () => {
+    const p = editingProfile;
+    if (!p) return;
+    p.name = p.name.trim() || 'Personal';
+    if (p.docNumber.length < 5) { showToast('Escribe el número de cédula o RIF', true); return; }
+    if (p.type === 'pm') {
+        if (p.phoneNumber.length !== 7) { showToast('El teléfono debe tener 7 dígitos después del prefijo', true); return; }
+        if (!p.banks.length) { showToast('Elige al menos un banco', true); return; }
+    } else if (p.account.length !== 20) {
+        showToast('El número de cuenta debe tener 20 dígitos', true);
+        return;
+    }
+    const clean = sanitizeProfile(p);
+    if (editingIsNew) payProfiles.list.push(clean);
+    else payProfiles.list = payProfiles.list.map((x) => (x.id === clean.id ? clean : x));
+    if (!getProfile(payProfiles.defaultId)) payProfiles.defaultId = clean.id;
+    if (editingIsNew) shareSelectedProfile = clean.id;
+    saveProfiles();
+    closeOverlay('profile-editor');
+    showToast('Perfil guardado');
+};
+
+const setupProfiles = () => {
+    openHooks['profiles-sheet'] = renderProfilesList;
+    closeHooks['profile-editor'] = () => {
+        editingProfile = null;
+        renderProfilesList();
+        renderShareProfiles();
+        updateSettingsProfilesSub();
+    };
+
+    $('btn-profile-new')?.addEventListener('click', () => openProfileEditor(null));
+    $('btn-profile-save')?.addEventListener('click', saveEditingProfile);
+
+    document.querySelectorAll('#profile-type [data-type]').forEach((b) => {
+        b.addEventListener('click', () => editorSetType(b.dataset.type));
+    });
+
+    const bindText = (id, field, digitsOnly, maxLen) => {
+        $(id)?.addEventListener('input', (e) => {
+            if (!editingProfile) return;
+            let v = e.target.value;
+            if (digitsOnly) {
+                v = v.replace(/\D/g, '').slice(0, maxLen);
+                if (v !== e.target.value) e.target.value = v;
+            }
+            editingProfile[field] = v;
+            if (field === 'account') editorUpdateAccountHint();
+        });
+    };
+    bindText('pf-name', 'name', false);
+    bindText('pf-doc', 'docNumber', true, 10);
+    bindText('pf-phone', 'phoneNumber', true, 7);
+    bindText('pf-holder', 'holder', false);
+    bindText('pf-account', 'account', true, 20);
+
+    $('pf-doc-type')?.addEventListener('change', (e) => { if (editingProfile) editingProfile.docType = e.target.value; });
+    $('pf-phone-prefix')?.addEventListener('change', (e) => { if (editingProfile) editingProfile.phonePrefix = e.target.value; });
+
+    $('pf-banks-toggle')?.addEventListener('click', () => {
+        const list = $('pf-banks-list');
+        if (!list) return;
+        const willOpen = list.classList.contains('hidden');
+        list.classList.toggle('hidden', !willOpen);
+        $('pf-banks-toggle').setAttribute('aria-expanded', String(willOpen));
+        editorRenderBanks();
+    });
+
+    // Eliminar pide un segundo toque para evitar borrados accidentales
+    $('btn-profile-delete')?.addEventListener('click', () => {
+        if (!editingProfile || editingIsNew) return;
+        if (Date.now() > deleteArmedUntil) {
+            deleteArmedUntil = Date.now() + 3000;
+            setDeleteLabel('Toca de nuevo para eliminar');
+            setTimeout(() => { if (Date.now() > deleteArmedUntil) setDeleteLabel('Eliminar perfil'); }, 3100);
+            return;
+        }
+        const id = editingProfile.id;
+        payProfiles.list = payProfiles.list.filter((p) => p.id !== id);
+        if (payProfiles.defaultId === id) payProfiles.defaultId = payProfiles.list[0]?.id || null;
+        if (shareSelectedProfile === id) shareSelectedProfile = payProfiles.defaultId || 'none';
+        saveProfiles();
+        closeOverlay('profile-editor');
+        showToast('Perfil eliminado');
+    });
+};
+
+const updateSettingsProfilesSub = () => {
+    const n = payProfiles.list.length;
+    setText('settings-profiles-sub', n ? `${n} ${n === 1 ? 'perfil guardado' : 'perfiles guardados'}` : 'Tus datos de Pago Móvil y Transferencia');
+};
+
+// ══════════════════════════════════════════════════════════════
+//  COMPARTIR
 // ══════════════════════════════════════════════════════════════
 const SHARE_OPTIONS = ['bcv', 'euro', 'binance', 'custom', 'usdt'];
-
-let shareState = {
-    method: 'pm',
-    pm: { bank: '', phone: '', id: '' },
-    tr: { bank: '', account: '', holder: '', id: '' },
-    rates: ['bcv'],
-};
+let shareRates = ['bcv'];
+let shareSelectedProfile = 'none';
 
 const loadShareState = () => {
     const saved = store.getJSON(KEYS.share, null);
-    if (!saved) return;
-    shareState = {
-        method: saved.method === 'tr' ? 'tr' : 'pm',
-        pm: { ...shareState.pm, ...saved.pm },
-        tr: { ...shareState.tr, ...saved.tr },
-        rates: Array.isArray(saved.rates) ? saved.rates : shareState.rates,
-    };
+    if (saved && Array.isArray(saved.rates)) shareRates = saved.rates.filter((k) => SHARE_OPTIONS.includes(k));
 };
 
-const saveShareState = () => store.setJSON(KEYS.share, shareState);
+const saveShareState = () => {
+    const saved = store.getJSON(KEYS.share, {}) || {};
+    store.setJSON(KEYS.share, { ...saved, rates: shareRates });
+};
 
 const isShareOptionAvailable = (k) => k !== 'custom' || (customRate.enabled && customRate.value > 0);
-const shareOptionTitle = (k) => (k === 'usdt' ? 'USDT a vender' : rateTitle(k));
+
+const shareOptionTitle = (k) => {
+    if (k === 'usdt') return usdtMode === 'sell' ? 'USDT a vender' : 'USDT a comprar';
+    const title = rateTitle(k);
+    return useNext && nextRates && (k === 'bcv' || k === 'euro') ? `${title} (${formatDayMonthYear(nextRates.date)})` : title;
+};
+
 const shareOptionValue = (k) => (k === 'usdt' ? `${formatUsdt(lastUsdtNeeded)} USDT` : `${formatCardTotal(k)} ${cardSuffix(k)}`);
 
-const syncShareMethod = () => {
-    document.querySelectorAll('#share-method [data-method]').forEach((b) => {
-        const selected = b.dataset.method === shareState.method;
-        b.classList.toggle('is-selected', selected);
-        b.setAttribute('aria-selected', String(selected));
+const makeSelectRow = (title, sub, selected, onClick) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = `select-row${selected ? ' is-selected' : ''}`;
+    row.setAttribute('aria-pressed', String(selected));
+    row.innerHTML = '<span class="select-row-main"><span class="select-row-title"></span><span class="select-row-sub"></span></span>'
+        + '<span class="select-check"><i data-lucide="check" class="ic-xs"></i></span>';
+    row.querySelector('.select-row-title').textContent = title;
+    row.querySelector('.select-row-sub').textContent = sub;
+    row.addEventListener('click', onClick);
+    return row;
+};
+
+const renderShareProfiles = () => {
+    const list = $('share-profiles');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!payProfiles.list.length) {
+        list.appendChild(makeEmptyCard('wallet-cards', 'Guarda tus datos de Pago Móvil o Transferencia para enviarlos con un toque.',
+            'Crear perfil de pago', () => openProfileEditor(null)));
+        refreshIcons();
+        return;
+    }
+    if (shareSelectedProfile !== 'none' && !getProfile(shareSelectedProfile)) shareSelectedProfile = payProfiles.defaultId || 'none';
+    payProfiles.list.forEach((p) => {
+        const isDefault = p.id === payProfiles.defaultId;
+        list.appendChild(makeSelectRow(`${p.name || 'Personal'}${isDefault ? ' ★' : ''}`, profileSummary(p),
+            shareSelectedProfile === p.id, () => { shareSelectedProfile = p.id; renderShareProfiles(); }));
     });
-    $('share-fields-pm')?.classList.toggle('hidden', shareState.method !== 'pm');
-    $('share-fields-tr')?.classList.toggle('hidden', shareState.method !== 'tr');
+    list.appendChild(makeSelectRow('Sin datos de pago', 'Solo los montos', shareSelectedProfile === 'none',
+        () => { shareSelectedProfile = 'none'; renderShareProfiles(); }));
+    refreshIcons();
 };
 
 const renderShareRates = () => {
@@ -1231,24 +1862,13 @@ const renderShareRates = () => {
     if (!list) return;
     list.innerHTML = '';
     SHARE_OPTIONS.filter(isShareOptionAvailable).forEach((k) => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'select-row';
-        row.classList.toggle('is-selected', shareState.rates.includes(k));
-        row.setAttribute('aria-pressed', String(shareState.rates.includes(k)));
-        row.innerHTML = '<span><span class="select-row-title"></span><span class="select-row-sub"></span></span>'
-            + '<span class="select-check"><i data-lucide="check" class="ic-xs"></i></span>';
-        row.querySelector('.select-row-title').textContent = shareOptionTitle(k);
-        row.querySelector('.select-row-sub').textContent = shareOptionValue(k);
-        row.addEventListener('click', () => {
-            const i = shareState.rates.indexOf(k);
-            if (i > -1) shareState.rates.splice(i, 1);
-            else shareState.rates.push(k);
+        list.appendChild(makeSelectRow(shareOptionTitle(k), shareOptionValue(k), shareRates.includes(k), () => {
+            const i = shareRates.indexOf(k);
+            if (i > -1) shareRates.splice(i, 1);
+            else shareRates.push(k);
             saveShareState();
-            row.classList.toggle('is-selected', i === -1);
-            row.setAttribute('aria-pressed', String(i === -1));
-        });
-        list.appendChild(row);
+            renderShareRates();
+        }));
     });
     refreshIcons();
 };
@@ -1256,46 +1876,20 @@ const renderShareRates = () => {
 const buildShareMessage = () => {
     const lines = [`Monto: ${amountLabel()}`];
     SHARE_OPTIONS
-        .filter((k) => shareState.rates.includes(k) && isShareOptionAvailable(k))
+        .filter((k) => shareRates.includes(k) && isShareOptionAvailable(k))
         .forEach((k) => lines.push(`${shareOptionTitle(k)}: ${shareOptionValue(k)}`));
 
-    const f = shareState[shareState.method];
-    const fields = shareState.method === 'pm'
-        ? [['Banco', f.bank], ['Teléfono', f.phone], ['C.I./RIF', f.id]]
-        : [['Banco', f.bank], ['Cuenta', f.account], ['Titular', f.holder], ['C.I./RIF', f.id]];
-    const filled = fields.filter(([, v]) => v && v.trim());
-    if (filled.length) {
-        lines.push('', shareState.method === 'pm' ? 'Datos para Pago Móvil' : 'Datos para Transferencia');
-        filled.forEach(([label, v]) => lines.push(`${label}: ${v.trim()}`));
-    }
+    const profile = getProfile(shareSelectedProfile);
+    if (profile) lines.push('', ...profileLines(profile));
     return lines.join('\n');
 };
 
 const setupShare = () => {
     openHooks['share-sheet'] = () => {
-        document.querySelectorAll('#share-sheet [data-field]').forEach((input) => {
-            const [group, field] = input.dataset.field.split('.');
-            input.value = shareState[group][field] || '';
-        });
-        syncShareMethod();
+        shareSelectedProfile = getProfile(payProfiles.defaultId) ? payProfiles.defaultId : 'none';
+        renderShareProfiles();
         renderShareRates();
     };
-
-    document.querySelectorAll('#share-method [data-method]').forEach((b) => {
-        b.addEventListener('click', () => {
-            shareState.method = b.dataset.method;
-            saveShareState();
-            syncShareMethod();
-        });
-    });
-
-    document.querySelectorAll('#share-sheet [data-field]').forEach((input) => {
-        input.addEventListener('input', () => {
-            const [group, field] = input.dataset.field.split('.');
-            shareState[group][field] = input.value;
-            saveShareState();
-        });
-    });
 
     $('btn-share-send')?.addEventListener('click', async () => {
         const text = buildShareMessage();
@@ -1306,30 +1900,6 @@ const setupShare = () => {
             try { await navigator.share({ text }); } catch (e) { /* el usuario canceló */ }
         }
         if (copied) closeOverlay('share-sheet');
-    });
-};
-
-// ══════════════════════════════════════════════════════════════
-//  ACCIONES DEL BLOQUE "DIFERENCIA A TASA"
-// ══════════════════════════════════════════════════════════════
-const setupHeroActions = () => {
-    $('btn-copy-usdt')?.addEventListener('click', async () => {
-        if (!(lastUsdtNeeded > 0)) return;
-        const ok = await copyText(lastUsdtNeeded.toFixed(2), `USDT copiado: ${lastUsdtNeeded.toFixed(2)}`);
-        const btn = $('btn-copy-usdt');
-        if (ok && btn) {
-            btn.classList.add('copied');
-            setTimeout(() => btn.classList.remove('copied'), 1500);
-        }
-    });
-
-    // Binance P2P no permite prellenar el monto por URL: se copia (con punto
-    // decimal, como lo espera Binance) para pegarlo al abrir el anuncio.
-    $('btn-binance-p2p')?.addEventListener('click', async () => {
-        if (lastUsdtNeeded > 0) {
-            try { await navigator.clipboard.writeText(lastUsdtNeeded.toFixed(2)); } catch (e) { }
-        }
-        window.open('https://p2p.binance.com/trade/sell/USDT?fiat=VES', '_blank', 'noopener');
     });
 };
 
@@ -1393,6 +1963,8 @@ const syncSettingsUI = () => {
     if (nameInput && document.activeElement !== nameInput) nameInput.value = customRate.name || '';
     if (valueInput && document.activeElement !== valueInput) valueInput.value = customRate.value || '';
 
+    updateSettingsProfilesSub();
+    updateInstallUI();
     setText('settings-version', `Monitor Bs. · v${APP_VERSION}`);
 };
 
@@ -1464,6 +2036,11 @@ const setupSettings = () => {
         updateUI();
     });
 
+    $('btn-install-row')?.addEventListener('click', () => {
+        closeOverlay('settings-sheet');
+        installApp();
+    });
+
     $('btn-open-whats-new')?.addEventListener('click', () => {
         closeOverlay('settings-sheet');
         showWhatsNew();
@@ -1479,12 +2056,12 @@ const setupSettings = () => {
 //  NOVEDADES Y GUÍA DE USO
 // ══════════════════════════════════════════════════════════════
 const WHATS_NEW = [
-    { icon: 'layout-grid', title: 'Tablero rediseñado', desc: 'Cada tarjeta muestra la fecha, la tasa anterior y cuánto cambió. Elige entre cuadrícula y lista.' },
-    { icon: 'calculator', title: 'Calculadora completa', desc: 'Tasas del día y anteriores listas para insertar, pegar montos, historial de operaciones y guardado como tasa personalizada.' },
-    { icon: 'share-2', title: 'Comparte tus datos de pago', desc: 'Envía tus datos de Pago Móvil o Transferencia junto con los montos calculados.' },
-    { icon: 'arrow-left-right', title: 'Selector de moneda', desc: 'Escribe el monto en Dólares, Euros o Bolívares directamente desde el conversor.' },
-    { icon: 'history', title: 'Historial exportable', desc: 'Consulta las tasas por rango de fechas y expórtalas a CSV o Excel.' },
-    { icon: 'palette', title: 'A tu gusto', desc: 'Tema claro u oscuro, color amarillo o verde, tasa personalizada y alertas cuando la brecha supere tu límite.' },
+    { icon: 'wallet-cards', title: 'Perfiles de pago', desc: 'Guarda tus datos de Pago Móvil o Transferencia (cédula, teléfono, bancos o cuenta) y envíalos con un toque al compartir.' },
+    { icon: 'calendar', title: 'Tasa del día siguiente', desc: 'Cuando el BCV publica la tasa de mañana, aparece "Hoy / Mañana" sobre las tarjetas para calcular con ella.' },
+    { icon: 'arrow-left-right', title: 'Vender o comprar USDT', desc: 'Elige la operación y el botón abre Binance P2P en esa sección. En Android abre directo la app de Binance.' },
+    { icon: 'calculator', title: 'Calculadora más cómoda', desc: 'Toca una tasa para insertarla y otra vez para quitarla. Borrar y C ahora están a la derecha.' },
+    { icon: 'download', title: 'Instala cuando quieras', desc: 'Botón fijo para instalar la app en la cabecera y en Configuración.' },
+    { icon: 'hand', title: 'Cierra deslizando', desc: 'Arrastra hacia abajo la barrita de cualquier ventana para cerrarla. La guía de uso ahora te deja probar cada botón.' },
 ];
 
 const renderWhatsNew = () => {
@@ -1514,23 +2091,43 @@ const showWhatsNew = () => {
 };
 
 const TOUR_STEPS = [
-    { element: '#converter', popover: { title: 'Conversor', description: 'Escribe el monto y se calcula al instante en todas las tasas. Los botones 10, 20, 30… cargan montos frecuentes.' } },
-    { element: '#btn-currency', popover: { title: 'Moneda del monto', description: 'Elige si escribes el monto en Dólares, Euros o Bolívares.' } },
+    { element: '#converter', popover: { title: 'Conversor', description: 'Escribe el monto y se calcula al instante en todas las tasas. Puedes tocar lo resaltado para probarlo.' } },
+    { element: '#currency-wrap', popover: { title: 'Moneda del monto', description: 'Elige si escribes el monto en Dólares, Euros o Bolívares. Tócalo para ver las opciones.' } },
     { element: '#btn-direction', popover: { title: 'Cambiar dirección', description: 'Alterna con un toque entre divisa → Bs y Bs → divisa.' } },
-    { element: '#conv-actions .conv-icons', popover: { title: 'Acciones rápidas', description: 'Compartir con tus datos de Pago Móvil, copiar el monto a tasa BCV, pegar un monto copiado o borrarlo.' } },
-    { element: '#hero', popover: { title: 'Diferencia a tasa', description: 'Cuántos USDT vender en Binance para cubrir el monto a tasa BCV. El botón copia esa cantidad y abre Binance P2P.' } },
-    { element: '#rates-grid', popover: { title: 'Tasas del día', description: 'Toca una tarjeta para copiar su valor. Cada una muestra la fecha, la tasa anterior y cuánto cambió. La Brecha compara Binance con el BCV.' } },
+    { element: '#conv-icons', popover: { title: 'Acciones rápidas', description: 'Compartir con tu perfil de pago, copiar el monto a tasa BCV, pegar un monto copiado o borrarlo.' } },
+    { element: '#rates-grid', popover: { title: 'Tasas', description: 'Toca una tarjeta para copiar su valor. Cada una muestra la fecha, la tasa anterior y cuánto cambió. La Brecha compara Binance con el BCV.' } },
     { element: '#view-toggle', popover: { title: 'Cuadrícula o lista', description: 'Elige cómo ver las tarjetas.' } },
-    { element: '#hdr-calc', popover: { title: 'Calculadora', description: 'Suma precios, inserta las tasas con un toque y usa el resultado como monto.' } },
+    { element: '#hero', popover: { title: 'Equivalente en USDT', description: 'Cuántos USDT vender (o comprar) en Binance para cubrir tu monto a tasa BCV. El botón copia la cantidad y abre Binance P2P.' } },
+    { element: '#hdr-calc', popover: { title: 'Calculadora', description: 'Suma precios, inserta tasas con un toque y usa el resultado como monto.' } },
     { element: '#hdr-history', popover: { title: 'Historial', description: 'Consulta las tasas por fecha y expórtalas a CSV o Excel.' } },
-    { element: '#hdr-settings', popover: { title: 'Configuración', description: 'Tema, color, alertas de brecha, tasa personalizada y esta guía cuando la necesites.' } },
+    { element: '#hdr-settings', popover: { title: 'Configuración', description: 'Tema, color, perfiles de pago, alertas, tasa personalizada y esta guía cuando la necesites.' } },
 ];
 
 const DRIVER_JS = 'https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js';
 const DRIVER_CSS = 'https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css';
 
-const startTour = async () => {
-    closeAllOverlays();
+let activeTour = null;
+let tourResumeAt = null;
+
+// Si durante la guía se toca un botón que abre una hoja, la guía se pausa
+// y continúa en el paso siguiente al cerrar esa hoja.
+const suspendTourIfActive = () => {
+    if (!activeTour) return;
+    const tour = activeTour;
+    tourResumeAt = (tour.getActiveIndex() ?? 0) + 1;
+    activeTour = null;
+    tour.destroy();
+};
+
+const resumeTourIfSuspended = () => {
+    if (tourResumeAt === null) return;
+    const index = tourResumeAt;
+    tourResumeAt = null;
+    setTimeout(() => startTour(index), 300);
+};
+
+const startTour = async (fromIndex = 0) => {
+    if (!fromIndex) { tourResumeAt = null; closeAllOverlays(); }
     try {
         if (!document.querySelector(`link[href="${DRIVER_CSS}"]`)) {
             const css = document.createElement('link');
@@ -1543,8 +2140,14 @@ const startTour = async () => {
         showToast('No se pudo cargar la guía', true);
         return;
     }
-    window.scrollTo({ top: 0 });
-    const tour = window.driver.js.driver({
+    const steps = TOUR_STEPS.filter((s) => {
+        const el = document.querySelector(s.element);
+        return el && el.offsetParent !== null;
+    });
+    if (fromIndex >= steps.length) { markIntroSeen(); return; }
+    if (!fromIndex) window.scrollTo({ top: 0 });
+
+    activeTour = window.driver.js.driver({
         showProgress: true,
         progressText: '{{current}} de {{total}}',
         nextBtnText: 'Siguiente',
@@ -1555,10 +2158,14 @@ const startTour = async () => {
         stageRadius: 14,
         overlayOpacity: 0.65,
         smoothScroll: true,
-        steps: TOUR_STEPS.filter((s) => document.querySelector(s.element)),
-        onDestroyed: markIntroSeen,
+        disableActiveInteraction: false,
+        steps,
+        onDestroyed: () => {
+            activeTour = null;
+            markIntroSeen();
+        },
     });
-    tour.drive();
+    activeTour.drive(fromIndex);
 };
 
 // Nuevo usuario → guía. Usuario que se actualiza → novedades. Solo una vez.
@@ -1568,7 +2175,7 @@ const maybeShowIntro = (isFirstVisit) => {
     introChecked = true;
     if (topOverlay()) return;
     if (!store.get(KEYS.onboarding)) {
-        if (isFirstVisit) setTimeout(startTour, 600);
+        if (isFirstVisit) setTimeout(() => startTour(), 600);
         else showWhatsNew();
     } else if (store.get(KEYS.whatsNew) !== APP_VERSION) {
         showWhatsNew();
@@ -1604,7 +2211,7 @@ const setLoadState = (state) => {
 };
 
 const fetchRates = async () => {
-    // Intento 1: Cloudflare Pages Function
+    // Intento 1: Cloudflare Pages Function (Binance P2P directo)
     try {
         const res = await fetch('/api/rates', { signal: AbortSignal.timeout(8000) });
         if (res.ok) {
@@ -1619,8 +2226,8 @@ const fetchRates = async () => {
 
     // Intento 2: dolarapi.com directo
     const [resUSD, resEUR] = await Promise.all([
-        fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) }),
-        fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) }),
+        fetch(`${DOLARAPI}/dolares`, { signal: AbortSignal.timeout(10000) }),
+        fetch(`${DOLARAPI}/euros`, { signal: AbortSignal.timeout(10000) }),
     ]);
     if (!resUSD.ok || !resEUR.ok) throw new Error('dolarapi no disponible');
     const jUSD = await resUSD.json();
@@ -1628,8 +2235,9 @@ const fetchRates = async () => {
     const bcvEntry = jUSD.find((i) => i.fuente === 'oficial');
     const parallel = jUSD.find((i) => i.fuente === 'paralelo');
     const euro = Array.isArray(jEUR) ? jEUR.find((i) => i.fuente === 'oficial')?.promedio : jEUR.promedio;
-    let date = bcvEntry?.fechaActualizacion ? new Date(bcvEntry.fechaActualizacion) : null;
-    if (date && isNaN(date.getTime())) date = null;
+    // "2026-10-20T00:00:00-04:00": se toma la fecha tal cual, sin convertir zona horaria
+    const rawDate = bcvEntry?.fechaActualizacion;
+    const date = typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? dateFromKey(rawDate.slice(0, 10)) : null;
     return { bcv: bcvEntry?.promedio ?? 0, binance: parallel?.promedio ?? 0, euro: euro ?? 0, date };
 };
 
@@ -1655,16 +2263,29 @@ const fetchData = () => {
             data = { ...data, bcv: r.bcv, binance: r.binance, euro: r.euro };
             rateDate = r.date;
             lastFetchAt = new Date();
-            saveHistoryEntry(toDateKey(rateDate || lastFetchAt), { bcv: r.bcv, binance: r.binance, euro: r.euro });
+
+            // BCV/Euro se guardan con su fecha oficial; el paralelo con la fecha de hoy
+            const officialKey = toDateKey(rateDate || lastFetchAt);
+            const todayKey = toDateKey(lastFetchAt);
+            const updates = { [officialKey]: { bcv: r.bcv, euro: r.euro } };
+            updates[todayKey] = { ...(updates[todayKey] || {}), binance: r.binance };
+            mergeHistory(updates);
             saveToStorage();
         } catch (err) {
             console.error('[fetchData]', err.message);
             showError('No se obtuvieron tasas. Intenta actualizar de nuevo en unos minutos.');
             if (!loadFromStorage()) data = { ...data, ...DEFAULT_RATES };
         } finally {
-            refreshPrevRates();
+            refreshDerivedRates();
             setLoadState(false);
         }
+        // El histórico (tasa de mañana, "Antes") llega aparte, sin bloquear la carga
+        syncHistoricos().then((changed) => {
+            if (!changed) return;
+            refreshDerivedRates();
+            updateUI();
+            if (!$('history-sheet')?.classList.contains('hidden')) renderHistoryList();
+        });
     })().finally(() => { fetchInFlight = null; });
     return fetchInFlight;
 };
@@ -1674,16 +2295,6 @@ const fetchData = () => {
 // ══════════════════════════════════════════════════════════════
 const updateOnlineStatus = () => $('offline-badge')?.classList.toggle('hidden', navigator.onLine);
 
-const hideInstallBanner = () => {
-    const banner = $('install-banner');
-    if (!banner) return;
-    banner.classList.add('hide');
-    setTimeout(() => banner.classList.add('hidden'), 350);
-};
-
-const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const isSamsungInternet = () => /SamsungBrowser/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent);
-
 // Abre la misma página en Chrome (si no está instalado, se queda en el navegador actual)
 const chromeIntentUrl = () => {
     const { host, pathname, search, href } = window.location;
@@ -1691,9 +2302,48 @@ const chromeIntentUrl = () => {
         + `S.browser_fallback_url=${encodeURIComponent(href)};end`;
 };
 
-// Samsung Internet genera su propio APK al instalar una PWA y, en Android 14+,
-// Play Protect lo bloquea ("se diseñó para una versión anterior de Android").
-// Desde Chrome la instalación funciona, así que ahí se guía al usuario.
+const hideInstallBanner = () => {
+    const banner = $('install-banner');
+    if (!banner) return;
+    banner.classList.add('hide');
+    setTimeout(() => banner.classList.add('hidden'), 350);
+};
+
+const updateInstallUI = () => {
+    const standalone = isStandalone();
+    $('hdr-install')?.classList.toggle('hidden', standalone || store.get(KEYS.installed) === '1');
+    $('btn-install-row')?.classList.toggle('hidden', standalone);
+    let sub = 'Acceso directo en tu pantalla de inicio';
+    if (isSamsungInternet()) sub = 'Se abre en Chrome para instalarla sin bloqueos';
+    else if (isIOS()) sub = 'Desde Safari: Compartir → Agregar a inicio';
+    setText('install-row-sub', sub);
+};
+
+// iOS no permite instalar con un botón: hay que hacerlo desde el menú Compartir
+const showIOSInstallHelp = () => {
+    const inSafari = !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
+    const msg = inSafari
+        ? 'En iPhone: toca Compartir (cuadro con flecha) y luego "Agregar a inicio"'
+        : 'En iPhone: toca Compartir y luego "Agregar a inicio" (en iOS 16.3 o anterior, abre la página en Safari)';
+    showToast(msg, false, 6000);
+};
+
+// Botón fijo de instalación: siempre disponible aunque se cierre el banner
+const installApp = async () => {
+    if (isStandalone()) { showToast('Ya estás usando la app instalada'); return; }
+    // Samsung Internet genera un APK que Play Protect bloquea en Android 14+
+    if (isSamsungInternet()) { window.location.href = chromeIntentUrl(); return; }
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+        deferredInstallPrompt = null;
+        if (choice && choice.outcome === 'accepted') hideInstallBanner();
+        return;
+    }
+    if (isIOS()) { showIOSInstallHelp(); return; }
+    showToast('Abre el menú del navegador y elige "Instalar app" o "Agregar a la pantalla de inicio"', false, 5000);
+};
+
 const setupSamsungInstallHint = () => {
     window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
     if (store.get(KEYS.samsungHintDismissed)) return;
@@ -1708,27 +2358,42 @@ const setupSamsungInstallHint = () => {
     });
 };
 
+// En iPhone no existe el evento de instalación: se muestra el banner con instrucciones
+const setupIOSInstallHint = () => {
+    if (store.get(KEYS.installDismissed)) return;
+    setText('install-title', 'Instala la app en tu iPhone');
+    setText('install-sub', 'Compartir → Agregar a inicio');
+    setText('btn-install', 'Cómo');
+    $('install-banner')?.classList.remove('hidden');
+    $('btn-install')?.addEventListener('click', showIOSInstallHelp);
+    $('btn-install-dismiss')?.addEventListener('click', () => {
+        store.set(KEYS.installDismissed, '1');
+        hideInstallBanner();
+    });
+};
+
 const setupInstallBanner = () => {
+    $('hdr-install')?.addEventListener('click', installApp);
+    updateInstallUI();
     if (isStandalone()) return;
     if (isSamsungInternet()) { setupSamsungInstallHint(); return; }
+    if (isIOS()) { setupIOSInstallHint(); return; }
 
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredInstallPrompt = e;
         if (!store.get(KEYS.installDismissed)) $('install-banner')?.classList.remove('hidden');
     });
-    $('btn-install')?.addEventListener('click', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-        hideInstallBanner();
-    });
+    $('btn-install')?.addEventListener('click', installApp);
     $('btn-install-dismiss')?.addEventListener('click', () => {
         store.set(KEYS.installDismissed, '1');
         hideInstallBanner();
     });
-    window.addEventListener('appinstalled', hideInstallBanner);
+    window.addEventListener('appinstalled', () => {
+        store.set(KEYS.installed, '1');
+        hideInstallBanner();
+        updateInstallUI();
+    });
 };
 
 const registerServiceWorker = async () => {
@@ -1767,6 +2432,7 @@ const init = () => {
     const isFirstVisit = !store.get(KEYS.data) && !store.get(KEYS.onboarding);
 
     loadCustomRate();
+    loadProfiles();
     loadShareState();
     const savedCurrency = store.get(KEYS.currency);
     if (CURRENCY[savedCurrency]) {
@@ -1781,9 +2447,11 @@ const init = () => {
 
     setupOverlays();
     setupConverter();
-    setupHeroActions();
+    setupDaySeg();
+    setupUsdtCard();
     setupCalculator();
     setupHistory();
+    setupProfiles();
     setupShare();
     setupSettings();
     setupWhatsNew();
@@ -1792,16 +2460,11 @@ const init = () => {
     updateOnlineStatus();
     registerServiceWorker();
 
-    if (loadFromStorage()) {
-        refreshPrevRates();
-        setText('text-update', 'Cargando tasas...');
-    }
+    if (loadFromStorage()) setText('text-update', 'Cargando tasas...');
+    refreshDerivedRates();
     updateUI();
 
-    fetchData().then(() => {
-        maybeShowIntro(isFirstVisit);
-        backfillHistory();
-    });
+    fetchData().then(() => maybeShowIntro(isFirstVisit));
 };
 
 if (document.readyState === 'loading') {

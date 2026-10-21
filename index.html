@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.0.1">
+    <link rel="stylesheet" href="style.css?v=3.1.0">
 </head>
 
 <body>
@@ -49,6 +49,9 @@
                 <button id="btn-refresh" class="icon-btn" type="button" title="Actualizar tasas" aria-label="Actualizar tasas">
                     <i data-lucide="refresh-cw" class="ic" id="icon-refresh"></i>
                 </button>
+                <button id="hdr-install" class="icon-btn hidden" type="button" title="Instalar app" aria-label="Instalar app">
+                    <i data-lucide="download" class="ic"></i>
+                </button>
                 <button id="hdr-calc" class="icon-btn" type="button" data-opens="calc-sheet" title="Calculadora" aria-label="Calculadora">
                     <i data-lucide="calculator" class="ic"></i>
                 </button>
@@ -66,7 +69,7 @@
             <!-- ── Conversor ── -->
             <section class="converter" id="converter">
                 <div class="conv-row">
-                    <div class="currency-wrap">
+                    <div class="currency-wrap" id="currency-wrap">
                         <button id="btn-currency" class="currency-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Moneda del monto">
                             <span id="currency-symbol">$</span>
                             <i data-lucide="chevron-down" class="ic-xs"></i>
@@ -96,7 +99,7 @@
 
                 <div class="conv-actions" id="conv-actions">
                     <p class="conv-hint" id="conv-hint"></p>
-                    <div class="conv-icons">
+                    <div class="conv-icons" id="conv-icons">
                         <button id="act-share" class="icon-btn" type="button" data-opens="share-sheet" title="Compartir con datos de pago" aria-label="Compartir">
                             <i data-lucide="share-2" class="ic"></i>
                         </button>
@@ -113,30 +116,15 @@
                 </div>
             </section>
 
-            <!-- ── Diferencia a tasa (USDT a vender) ── -->
-            <section class="hero-card" id="hero">
-                <div class="hero-top">
-                    <span class="pulse-dot"></span>
-                    <span class="hero-label">Diferencia a tasa</span>
-                </div>
-                <div class="hero-value-row">
-                    <p class="hero-value" id="eq-usdt">--</p>
-                    <button id="btn-copy-usdt" class="icon-btn icon-btn-accent" type="button" title="Copiar USDT" aria-label="Copiar USDT">
-                        <i data-lucide="copy" class="ic" id="icon-copy"></i>
-                    </button>
-                </div>
-                <p class="hero-sub">Para cubrir <strong id="sub-amount">1 $</strong> a tasa BCV vendiendo USDT en Binance</p>
-                <button id="btn-binance-p2p" class="binance-btn" type="button">
-                    <i data-lucide="external-link" class="ic-sm"></i>
-                    Copiar monto y abrir Binance P2P
-                </button>
-            </section>
-
             <!-- ── Tasas ── -->
             <section class="rates-section">
                 <div class="rates-header">
                     <h2 class="section-label">Tasas</h2>
                     <span class="rate-date-badge" id="rate-date-badge"></span>
+                    <div class="seg seg-xs hidden" id="day-seg" role="group" aria-label="Día de la tasa">
+                        <button type="button" data-day="today">Hoy</button>
+                        <button type="button" data-day="next" id="day-next-label">Mañana</button>
+                    </div>
                     <div class="view-toggle" id="view-toggle" role="group" aria-label="Vista de tasas">
                         <button type="button" data-view="grid" title="Cuadrícula" aria-label="Vista en cuadrícula">
                             <i data-lucide="layout-grid" class="ic-sm"></i>
@@ -155,13 +143,36 @@
                     <p id="error-text"></p>
                 </div>
             </section>
+
+            <!-- ── Equivalente en USDT (vender / comprar en Binance) ── -->
+            <section class="usdt-card" id="hero">
+                <div class="usdt-head">
+                    <span class="usdt-title">Equivalente en USDT</span>
+                    <div class="seg seg-xs" id="usdt-mode" role="group" aria-label="Operación en Binance">
+                        <button type="button" data-mode="sell">Vender</button>
+                        <button type="button" data-mode="buy">Comprar</button>
+                    </div>
+                </div>
+                <div class="usdt-value-row">
+                    <p class="usdt-value" id="eq-usdt">--</p>
+                    <button id="btn-copy-usdt" class="icon-btn" type="button" title="Copiar USDT" aria-label="Copiar USDT">
+                        <i data-lucide="copy" class="ic"></i>
+                    </button>
+                </div>
+                <p class="usdt-sub" id="usdt-sub"></p>
+                <a id="btn-binance-p2p" class="binance-btn" href="https://p2p.binance.com/trade/sell/USDT?fiat=VES&amp;payment=all-payments"
+                    target="_blank" rel="noopener">
+                    <i data-lucide="external-link" class="ic-sm"></i>
+                    <span id="binance-btn-text">Copiar y vender en Binance P2P</span>
+                </a>
+            </section>
         </main>
     </div>
 
     <!-- ══════════════ Calculadora ══════════════ -->
     <div id="calc-sheet" class="sheet-overlay hidden" aria-hidden="true">
         <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="calc-title">
-            <div class="sheet-handle"></div>
+            <div class="sheet-handle" aria-hidden="true"></div>
             <div class="sheet-header">
                 <span class="sheet-icon"><i data-lucide="calculator" class="ic"></i></span>
                 <h3 id="calc-title">Calculadora</h3>
@@ -199,38 +210,37 @@
                 </div>
 
                 <div id="calc-chips-block" class="calc-chips-block">
-                    <p class="chips-label">Tasas de cambio · toca para insertar</p>
+                    <p class="chips-label">Tasas de cambio · toca para insertar o quitar</p>
                     <div class="chips-row" id="calc-chips-current"></div>
-                    <p class="chips-label">Tasas anteriores · toca para insertar</p>
+                    <p class="chips-label">Tasas anteriores</p>
                     <div class="chips-row" id="calc-chips-prev"></div>
                 </div>
 
                 <div class="calc-keypad">
-                    <button type="button" class="key key-fn" data-key="C">C</button>
-                    <button type="button" class="key key-fn" data-key="sign">±</button>
-                    <button type="button" class="key key-fn" data-key="%">%</button>
-                    <button type="button" class="key key-op" data-key="/">÷</button>
-
                     <button type="button" class="key" data-key="7">7</button>
                     <button type="button" class="key" data-key="8">8</button>
                     <button type="button" class="key" data-key="9">9</button>
-                    <button type="button" class="key key-op" data-key="*">×</button>
+                    <button type="button" class="key key-op" data-key="/">÷</button>
+                    <button type="button" class="key key-del" data-key="back" aria-label="Borrar último">
+                        <i data-lucide="delete" class="ic-md"></i>
+                    </button>
 
                     <button type="button" class="key" data-key="4">4</button>
                     <button type="button" class="key" data-key="5">5</button>
                     <button type="button" class="key" data-key="6">6</button>
-                    <button type="button" class="key key-op" data-key="-">−</button>
+                    <button type="button" class="key key-op" data-key="*">×</button>
+                    <button type="button" class="key key-del" data-key="C" aria-label="Borrar todo">C</button>
 
                     <button type="button" class="key" data-key="1">1</button>
                     <button type="button" class="key" data-key="2">2</button>
                     <button type="button" class="key" data-key="3">3</button>
-                    <button type="button" class="key key-op" data-key="+">+</button>
+                    <button type="button" class="key key-op" data-key="-">−</button>
+                    <button type="button" class="key key-fn" data-key="%">%</button>
 
-                    <button type="button" class="key key-fn" data-key="back" aria-label="Borrar">
-                        <i data-lucide="delete" class="ic-md"></i>
-                    </button>
+                    <button type="button" class="key key-fn" data-key="sign" aria-label="Cambiar signo">±</button>
                     <button type="button" class="key" data-key="0">0</button>
                     <button type="button" class="key" data-key=".">,</button>
+                    <button type="button" class="key key-op" data-key="+">+</button>
                     <button type="button" class="key key-eq" data-key="=">=</button>
                 </div>
             </div>
@@ -244,7 +254,7 @@
     <!-- ══════════════ Historial ══════════════ -->
     <div id="history-sheet" class="sheet-overlay hidden" aria-hidden="true">
         <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title">
-            <div class="sheet-handle"></div>
+            <div class="sheet-handle" aria-hidden="true"></div>
             <div class="sheet-header">
                 <span class="sheet-icon"><i data-lucide="history" class="ic"></i></span>
                 <h3 id="history-title">Historial</h3>
@@ -279,10 +289,10 @@
     <!-- ══════════════ Compartir ══════════════ -->
     <div id="share-sheet" class="sheet-overlay hidden" aria-hidden="true">
         <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="share-title">
-            <div class="sheet-handle"></div>
+            <div class="sheet-handle" aria-hidden="true"></div>
             <div class="sheet-header">
                 <span class="sheet-icon"><i data-lucide="share-2" class="ic"></i></span>
-                <h3 id="share-title">Compartir tasa</h3>
+                <h3 id="share-title">Compartir</h3>
                 <div class="sheet-header-actions">
                     <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
                         <i data-lucide="x" class="ic"></i>
@@ -290,28 +300,13 @@
                 </div>
             </div>
             <div class="sheet-body">
-                <div class="seg seg-lg" id="share-method" role="tablist">
-                    <button type="button" role="tab" data-method="pm">
-                        <i data-lucide="smartphone" class="ic-sm"></i>Pago Móvil
-                    </button>
-                    <button type="button" role="tab" data-method="tr">
-                        <i data-lucide="landmark" class="ic-sm"></i>Transferencia
-                    </button>
+                <div class="share-label-row">
+                    <p class="share-label">Datos de pago</p>
+                    <button id="share-manage-profiles" class="link-btn" type="button" data-opens="profiles-sheet">Gestionar perfiles</button>
                 </div>
+                <div class="select-list" id="share-profiles"></div>
 
-                <div class="share-fields" id="share-fields-pm">
-                    <input class="field-input" data-field="pm.bank" type="text" placeholder="Banco (ej. Banesco)" autocomplete="off">
-                    <input class="field-input" data-field="pm.phone" type="tel" placeholder="Teléfono (ej. 04141234567)" autocomplete="off">
-                    <input class="field-input" data-field="pm.id" type="text" placeholder="Cédula / RIF" autocomplete="off">
-                </div>
-                <div class="share-fields hidden" id="share-fields-tr">
-                    <input class="field-input" data-field="tr.bank" type="text" placeholder="Banco (ej. Banesco)" autocomplete="off">
-                    <input class="field-input" data-field="tr.account" type="text" inputmode="numeric" placeholder="Número de cuenta (20 dígitos)" autocomplete="off">
-                    <input class="field-input" data-field="tr.holder" type="text" placeholder="Titular" autocomplete="off">
-                    <input class="field-input" data-field="tr.id" type="text" placeholder="Cédula / RIF" autocomplete="off">
-                </div>
-
-                <p class="share-label">Selecciona las tasas a incluir:</p>
+                <p class="share-label">Tasas a incluir</p>
                 <div class="select-list" id="share-rates"></div>
             </div>
             <div class="sheet-footer">
@@ -322,10 +317,114 @@
         </div>
     </div>
 
+    <!-- ══════════════ Perfiles de pago ══════════════ -->
+    <div id="profiles-sheet" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="profiles-title">
+            <div class="sheet-handle" aria-hidden="true"></div>
+            <div class="sheet-header">
+                <span class="sheet-icon"><i data-lucide="wallet-cards" class="ic"></i></span>
+                <h3 id="profiles-title">Perfiles de pago</h3>
+                <div class="sheet-header-actions">
+                    <button id="btn-profile-new" class="icon-btn icon-btn-accent" type="button" title="Nuevo perfil" aria-label="Nuevo perfil">
+                        <i data-lucide="plus" class="ic"></i>
+                    </button>
+                    <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                        <i data-lucide="x" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <p class="sheet-intro">Guarda tus datos de Pago Móvil o Transferencia para enviarlos con un toque cuando compartas
+                    un monto. El perfil con la estrella es el que se usa por defecto.</p>
+                <div id="profiles-list" class="profiles-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ Editor de perfil ══════════════ -->
+    <div id="profile-editor" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title">
+            <div class="sheet-handle" aria-hidden="true"></div>
+            <div class="sheet-header">
+                <button class="icon-btn sheet-close" type="button" data-close aria-label="Volver">
+                    <i data-lucide="chevron-left" class="ic"></i>
+                </button>
+                <h3 id="profile-editor-title">Nuevo perfil</h3>
+                <div class="sheet-header-actions">
+                    <button id="btn-profile-save" class="icon-btn icon-btn-solid" type="button" title="Guardar" aria-label="Guardar perfil">
+                        <i data-lucide="check" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <div class="seg seg-lg" id="profile-type" role="tablist">
+                    <button type="button" role="tab" data-type="pm"><i data-lucide="smartphone" class="ic-sm"></i>Pago Móvil</button>
+                    <button type="button" role="tab" data-type="tr"><i data-lucide="landmark" class="ic-sm"></i>Transferencia</button>
+                </div>
+
+                <p class="settings-group-label">Perfil</p>
+                <div class="form-card">
+                    <label class="form-row">
+                        <span class="form-label">Nombre</span>
+                        <input id="pf-name" class="form-input" type="text" placeholder="Personal" maxlength="24" autocomplete="off">
+                    </label>
+                    <div class="form-row">
+                        <span class="form-label">Documento</span>
+                        <select id="pf-doc-type" class="form-select" aria-label="Tipo de documento">
+                            <option>V</option>
+                            <option>E</option>
+                            <option>J</option>
+                            <option>G</option>
+                            <option>P</option>
+                        </select>
+                        <input id="pf-doc" class="form-input" type="text" inputmode="numeric" placeholder="12345678" maxlength="10" autocomplete="off" aria-label="Número de documento">
+                    </div>
+                    <div class="form-row" data-for="pm">
+                        <span class="form-label">Teléfono</span>
+                        <select id="pf-phone-prefix" class="form-select" aria-label="Prefijo">
+                            <option>0412</option>
+                            <option>0414</option>
+                            <option>0416</option>
+                            <option>0422</option>
+                            <option>0424</option>
+                            <option>0426</option>
+                        </select>
+                        <input id="pf-phone" class="form-input" type="tel" inputmode="numeric" placeholder="1234567" maxlength="7" autocomplete="off" aria-label="Número de teléfono">
+                    </div>
+                    <label class="form-row" data-for="tr">
+                        <span class="form-label">Titular</span>
+                        <input id="pf-holder" class="form-input" type="text" placeholder="Nombre del titular" maxlength="40" autocomplete="off">
+                    </label>
+                    <label class="form-row form-row-col" data-for="tr">
+                        <span class="form-label">Número de cuenta</span>
+                        <input id="pf-account" class="form-input form-input-left" type="text" inputmode="numeric" placeholder="20 dígitos" maxlength="24" autocomplete="off">
+                        <span class="form-hint" id="pf-account-bank"></span>
+                    </label>
+                </div>
+
+                <div data-for="pm">
+                    <p class="settings-group-label">Bancos</p>
+                    <div class="form-card">
+                        <button id="pf-banks-toggle" class="form-row form-row-btn" type="button" aria-expanded="false">
+                            <span class="form-label">Bancos</span>
+                            <span class="form-value" id="pf-banks-summary">Ninguno</span>
+                            <i data-lucide="chevron-right" class="ic-sm row-chevron" id="pf-banks-chevron"></i>
+                        </button>
+                        <div id="pf-banks-list" class="bank-list hidden"></div>
+                    </div>
+                </div>
+
+                <button id="btn-profile-delete" class="btn-danger hidden" type="button">
+                    <i data-lucide="trash-2" class="ic-sm"></i>Eliminar perfil
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ══════════════ Configuración ══════════════ -->
     <div id="settings-sheet" class="sheet-overlay hidden" aria-hidden="true">
         <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-            <div class="sheet-handle"></div>
+            <div class="sheet-handle" aria-hidden="true"></div>
             <div class="sheet-header">
                 <span class="sheet-icon"><i data-lucide="settings" class="ic"></i></span>
                 <h3 id="settings-title">Configuración</h3>
@@ -368,6 +467,18 @@
                             <button type="button" data-view="list">Lista</button>
                         </div>
                     </div>
+                </div>
+
+                <p class="settings-group-label">Pagos</p>
+                <div class="settings-card">
+                    <button class="settings-row settings-row-btn" type="button" data-opens="profiles-sheet">
+                        <span class="settings-row-icon"><i data-lucide="wallet-cards" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Perfiles de pago</p>
+                            <p class="settings-row-sub" id="settings-profiles-sub">Tus datos de Pago Móvil y Transferencia</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
+                    </button>
                 </div>
 
                 <p class="settings-group-label">Alertas</p>
@@ -418,8 +529,16 @@
                     </div>
                 </div>
 
-                <p class="settings-group-label">Ayuda</p>
+                <p class="settings-group-label">App</p>
                 <div class="settings-card">
+                    <button id="btn-install-row" class="settings-row settings-row-btn" type="button">
+                        <span class="settings-row-icon"><i data-lucide="download" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Instalar app</p>
+                            <p class="settings-row-sub" id="install-row-sub">Acceso directo en tu pantalla de inicio</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
+                    </button>
                     <button id="btn-open-whats-new" class="settings-row settings-row-btn" type="button">
                         <span class="settings-row-icon"><i data-lucide="sparkles" class="ic-sm"></i></span>
                         <div class="settings-row-text">
@@ -483,7 +602,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.0.1"></script>
+    <script src="app.js?v=3.1.0"></script>
 </body>
 
 </html>
