@@ -1450,14 +1450,14 @@ input[type=number] {
 .calc-body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .calc-display {
     border: 1px solid var(--border);
     background: var(--surface);
     border-radius: 18px;
-    padding: 10px 12px 12px;
+    padding: 10px 12px 10px;
 }
 
 .calc-display-top {
@@ -1468,9 +1468,13 @@ input[type=number] {
 
 .calc-items {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 5px;
-    margin-top: 10px;
+    margin-top: 8px;
+    height: 26px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
 }
 
 .calc-item {
@@ -1505,25 +1509,29 @@ input[type=number] {
 
 .calc-expression {
     text-align: right;
-    min-height: 18px;
-    margin-top: 10px;
+    height: 18px;
+    line-height: 18px;
+    margin-top: 6px;
     font-size: 13px;
     color: var(--text-3);
     white-space: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .calc-main {
     text-align: right;
-    font-size: 40px;
+    height: 48px;
+    line-height: 48px;
+    font-size: 38px;
     font-weight: 800;
     letter-spacing: -0.02em;
-    line-height: 1.15;
     white-space: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     font-variant-numeric: tabular-nums;
+    transition: font-size 0.18s ease;
 }
 
 .calc-expression::-webkit-scrollbar,
@@ -1542,13 +1550,21 @@ input[type=number] {
 .calc-chips-block {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 6px;
 }
 
 .chips-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 1px 24px 1px 1px;
+    margin-right: -18px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 
 .chips-row:empty::after {
@@ -1668,7 +1684,7 @@ input[type=number] {
 }
 
 .key {
-    height: 52px;
+    height: clamp(44px, 6.4vh, 52px);
     border: none;
     border-radius: 999px;
     background: var(--surface-3);
@@ -2591,4 +2607,49 @@ input[type=number] {
     .toast {
         animation: none !important;
     }
+}
+
+
+/* ── Calculadora: detalles de la pantalla ── */
+.calc-items::-webkit-scrollbar,
+.chips-row::-webkit-scrollbar {
+    display: none;
+}
+
+.calc-items.is-empty {
+    visibility: hidden;
+}
+
+.calc-item {
+    flex-shrink: 0;
+}
+
+.calc-main.fs-xl { font-size: 38px; }
+.calc-main.fs-lg { font-size: 30px; }
+.calc-main.fs-md { font-size: 24px; }
+.calc-main.fs-sm { font-size: 20px; }
+
+/* Al pulsar "=": el resultado sube y la operación aparece arriba */
+.calc-main.calc-swap {
+    animation: calcResultIn 0.34s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.calc-expression.calc-swap {
+    animation: calcEchoIn 0.34s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes calcResultIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes calcEchoIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .calc-main { transition: none; }
+    .calc-main.calc-swap,
+    .calc-expression.calc-swap { animation: none; }
 }

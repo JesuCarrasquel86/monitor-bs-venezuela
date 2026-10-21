@@ -1116,7 +1116,8 @@ const calcEvaluate = (expr) => {
     return Number.isFinite(result) ? result : null;
 };
 
-const calcPreview = () => calcEvaluate(calcExpr);
+// Valor de la operación ignorando un operador final pendiente ("80 + 2 +" → 82)
+const calcPreview = () => calcEvaluate(calcExpr.replace(/[+\-*/~.]+$/, ''));
 
 // Número que se está escribiendo, con separador de miles: "~1234.5" → "-1.234,5"
 const groupTyped = (s) => {
@@ -1127,15 +1128,48 @@ const groupTyped = (s) => {
     return `${neg ? '-' : ''}${intPart}${dot ? ',' : ''}${dec}${pct}`;
 };
 
+const CALC_OP_SYMBOL = { '+': '+', '-': '−', '*': '×', '/': '÷' };
+
+// "60+20*~3" → "60 + 20 × -3", con separador de miles en cada número
+const formatExpr = (expr) => expr
+    .split(/([+\-*/])/)
+    .map((part) => (isCalcOp(part) ? ` ${CALC_OP_SYMBOL[part]} ` : groupTyped(part)))
+    .join('')
+    .trim();
+
+// La letra se achica por pasos (con transición) cuando la operación es larga
+const CALC_SIZE_STEPS = [[9, 'fs-xl'], [13, 'fs-lg'], [18, 'fs-md'], [Infinity, 'fs-sm']];
+const fitCalcMain = (el) => {
+    const len = el.textContent.replace(/\s/g, '').length;
+    const size = CALC_SIZE_STEPS.find(([max]) => len <= max)[1];
+    CALC_SIZE_STEPS.forEach(([, cls]) => el.classList.toggle(cls, cls === size));
+    el.scrollLeft = el.scrollWidth; // lo último escrito siempre a la vista
+};
+
+// La línea grande muestra lo que se escribe; arriba, pequeño, el resultado parcial.
+// Al pulsar "=" el resultado pasa a la línea grande.
 const renderCalc = () => {
-    const hasOp = calcHasOp();
-    const preview = calcPreview();
-    setText('calc-expression', hasOp ? toCalcDisplay(calcExpr) : calcEchoExpr);
     let main;
-    if (!calcExpr) main = '0';
-    else if (hasOp) main = preview !== null ? formatCalc(preview) : toCalcDisplay(calcExpr);
-    else main = groupTyped(calcExpr);
-    setText('calc-main', main);
+    let sub = '';
+    if (calcJustEvaluated) {
+        main = groupTyped(calcExpr);
+        sub = calcEchoExpr;
+    } else if (!calcExpr) {
+        main = '0';
+    } else if (calcHasOp() || calcExpr.includes('%')) {
+        main = formatExpr(calcExpr);
+        const complete = calcExpr.replace(/[+\-*/~.]+$/, '');
+        const live = /[+\-*/%]/.test(complete) ? calcEvaluate(complete) : null;
+        if (live !== null) sub = `= ${formatCalc(live)}`;
+    } else {
+        main = groupTyped(calcExpr);
+    }
+    setText('calc-expression', sub);
+    const mainEl = $('calc-main');
+    if (mainEl) {
+        mainEl.textContent = main;
+        fitCalcMain(mainEl);
+    }
     renderCalcItems();
 
     // Las tasas que ya están en la operación se marcan (tocarlas otra vez las quita)
@@ -1213,17 +1247,31 @@ const calcClear = () => {
     renderCalc();
 };
 
+// El resultado "sube" a la línea grande y la operación queda arriba
+const playCalcResult = () => {
+    if (prefersReducedMotion()) return;
+    ['calc-main', 'calc-expression'].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.classList.remove('calc-swap');
+        void el.offsetWidth;
+        el.classList.add('calc-swap');
+        afterAnimation(el, 450, () => el.classList.remove('calc-swap'));
+    });
+};
+
 const calcEquals = () => {
-    const v = calcPreview();
-    if (v === null) return;
-    if (calcHasOp() || calcExpr.includes('%')) {
-        const shown = toCalcDisplay(calcExpr);
-        calcEchoExpr = `${shown} =`;
-        saveCalcHistoryEntry(shown, v);
-    }
+    const complete = calcExpr.replace(/[+\-*/~.]+$/, '');
+    const v = calcEvaluate(complete);
+    if (v === null || calcJustEvaluated) return;
+    if (!/[+\-*/%]/.test(complete)) return; // un número solo no tiene nada que calcular
+    const shown = formatExpr(complete);
+    calcEchoExpr = `${shown} =`;
+    saveCalcHistoryEntry(shown, v);
     calcExpr = numToCalcExpr(v);
     calcJustEvaluated = true;
     renderCalc();
+    playCalcResult();
 };
 
 // Inserta un número (tasa, valor pegado): si ya hay un número delante, multiplica
@@ -1265,7 +1313,8 @@ const renderCalcItems = () => {
     const wrap = $('calc-items');
     if (!wrap) return;
     const items = getCalcItems();
-    wrap.classList.toggle('hidden', !items);
+    // La fila conserva su espacio aunque esté vacía, para que el teclado no se mueva
+    wrap.classList.toggle('is-empty', !items);
     wrap.innerHTML = '';
     if (!items) return;
     items.forEach((part, idx) => {
@@ -1431,7 +1480,7 @@ const setupCalculator = () => {
         const v = calcPreview();
         if (v === null) { showToast('No hay un resultado para usar', true); return; }
         if (v < 0) { showToast('El monto no puede ser negativo', true); return; }
-        if (calcHasOp() || calcExpr.includes('%')) saveCalcHistoryEntry(toCalcDisplay(calcExpr), v);
+        if (calcHasOp() || calcExpr.includes('%')) saveCalcHistoryEntry(formatExpr(calcExpr), v);
         clearQuickActive();
         setAmount(v);
         calcExpr = '';
