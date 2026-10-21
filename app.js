@@ -998,6 +998,8 @@ const closeAllOverlays = () => { while (topOverlay()) closeOverlay(topOverlay())
 // fijos como mosaicos. Se mueve el mismo elemento (con sus eventos) al mosaico.
 const DESKTOP_QUERY = '(min-width: 900px)';
 const DOCKED_PANELS = { 'calc-sheet': 'calc-tile', 'history-sheet': 'history-tile' };
+const DOCKED_BLOCKS = { 'settings-quick': 'prefs-tile' };
+const blockHomes = {}; // dónde vuelve cada bloque al salir de escritorio
 let isDesktopLayout = false;
 
 const isDocked = (id) => isDesktopLayout && id in DOCKED_PANELS;
@@ -1031,6 +1033,20 @@ const applyDesktopLayout = (on) => {
         (on ? tile : overlay).appendChild(sheet);
         if (on) openHooks[overlayId]?.();
     });
+    // Bloques de Configuración que en escritorio quedan a la vista, bajo la calculadora
+    Object.entries(DOCKED_BLOCKS).forEach(([blockId, tileId]) => {
+        const block = $(blockId);
+        const tile = $(tileId);
+        if (!block || !tile) return;
+        if (on) {
+            blockHomes[blockId] = { parent: block.parentNode, next: block.nextSibling };
+            tile.appendChild(block);
+        } else if (blockHomes[blockId]) {
+            const { parent, next } = blockHomes[blockId];
+            parent.insertBefore(block, next);
+        }
+    });
+    if (on) setSwitch('toggle-auto-next', isAutoNextEnabled());
 };
 
 const setupDesktopLayout = () => {

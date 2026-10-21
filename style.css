@@ -2695,8 +2695,14 @@ a.settings-row-btn {
    La calculadora y el historial pasan de hojas a mosaicos fijos (ver app.js)
    ============================================= */
 .dock-tile,
+.desk-side,
 .desktop-only {
     display: none;
+}
+
+/* En Configuración (teléfono) el bloque va entre otros grupos: conserva su margen */
+.settings-quick > .settings-group-label:first-child {
+    margin-top: 14px;
 }
 
 @media (min-width: 900px) {
@@ -2734,7 +2740,7 @@ a.settings-row-btn {
     body.is-desktop .rates-section { grid-area: rates; }
     body.is-desktop #hero { grid-area: usdt; }
     body.is-desktop #history-tile { grid-area: hist; }
-    body.is-desktop #calc-tile { grid-area: calc; }
+    body.is-desktop #desk-side { grid-area: calc; }
 
     /* 2 × 2 junto a la calculadora; en pantallas grandes, todas en una fila */
     body.is-desktop .rates-grid:not(.is-list) {
@@ -2748,9 +2754,16 @@ a.settings-row-btn {
         min-width: 0;
     }
 
-    body.is-desktop #calc-tile {
-        position: sticky;
-        top: 68px; /* igual a su posición natural bajo la cabecera */
+    /* Columna derecha: calculadora y, debajo, los ajustes rápidos */
+    body.is-desktop .desk-side {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        min-width: 0;
+    }
+
+    body.is-desktop #prefs-tile .settings-group-label:first-child {
+        margin-top: 2px;
     }
 
     /* El historial ocupa el alto de su fila sin estirarla con su lista */
@@ -2774,11 +2787,6 @@ a.settings-row-btn {
         box-shadow: none;
         animation: none;
         transform: none;
-    }
-
-    body.is-desktop #calc-tile .sheet {
-        max-height: calc(100vh - 92px);
-        max-height: calc(100dvh - 92px);
     }
 
     body.is-desktop .dock-tile .sheet-handle,
@@ -2822,6 +2830,15 @@ a.settings-row-btn {
 
     body.is-desktop .sheet-overlay .sheet-header {
         padding-top: 16px;
+    }
+}
+
+/* La columna derecha (calculadora + ajustes, ~890px) acompaña al bajar solo si cabe
+   entera en la pantalla; si no, quedaría fuera de alcance lo de abajo */
+@media (min-width: 900px) and (min-height: 1000px) {
+    body.is-desktop .desk-side {
+        position: sticky;
+        top: 68px; /* igual a su posición natural bajo la cabecera */
     }
 }
 

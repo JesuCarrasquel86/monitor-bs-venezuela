@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.4.1">
+    <link rel="stylesheet" href="style.css?v=3.4.3">
 </head>
 
 <body>
@@ -170,7 +170,10 @@
 
             <!-- ── Escritorio: aquí se acomodan el historial y la calculadora como mosaicos ── -->
             <section class="dock-tile" id="history-tile" aria-label="Historial"></section>
-            <section class="dock-tile" id="calc-tile" aria-label="Calculadora"></section>
+            <aside class="desk-side" id="desk-side">
+                <section class="dock-tile" id="calc-tile" aria-label="Calculadora"></section>
+                <section class="dock-tile" id="prefs-tile" aria-label="Ajustes rápidos"></section>
+            </aside>
         </main>
     </div>
 
@@ -484,6 +487,8 @@
                     </div>
                 </div>
 
+                <!-- En escritorio este bloque se muestra bajo la calculadora (ver app.js) -->
+                <div id="settings-quick" class="settings-quick">
                 <p class="settings-group-label">Tasas</p>
                 <div class="settings-card">
                     <div class="settings-row">
@@ -508,6 +513,7 @@
                         </div>
                         <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
                     </button>
+                </div>
                 </div>
 
                 <p class="settings-group-label">Alertas</p>
@@ -646,7 +652,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.4.1"></script>
+    <script src="app.js?v=3.4.3"></script>
 </body>
 
 </html>
