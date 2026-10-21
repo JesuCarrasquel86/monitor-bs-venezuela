@@ -5,6 +5,12 @@
   "observability": {
     "enabled": true
   },
+  // Dominios propios. Cloudflare crea el DNS y el certificado al desplegar.
+  "routes": [
+    { "pattern": "bainas.app", "custom_domain": true },
+    { "pattern": "app.bainas.app", "custom_domain": true }
+  ],
+  "workers_dev": true,
   "assets": {
     "directory": "."
   }
