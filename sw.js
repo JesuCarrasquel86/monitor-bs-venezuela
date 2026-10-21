@@ -1,12 +1,12 @@
 /* ============================================================
-   SERVICE WORKER – Monitor Bs. Venezuela PWA v1.5.0
+   SERVICE WORKER – Bainas PWA v1.5.0
    Estrategia: Network-First para assets propios (siempre frescos)
                Cache-First para CDNs externos
    ============================================================ */
 
-const CACHE_NAME = 'monitor-dolar-v3.2.2';
+const CACHE_NAME = 'monitor-dolar-v3.3.0';
 const OWN_ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json',
-    '/icons/icon-192.png', '/icons/icon-512.png'];
+    '/icons/icon-96.png', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 // ── Instalación: skipWaiting inmediato ──
 self.addEventListener('install', (event) => {
