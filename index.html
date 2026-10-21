@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="dark">
+<html lang="es" data-theme="dark" data-accent="yellow">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>monitor-bs-vz</title>
-    <meta name="description" content="Calculadora y monitor de tasas BCV, Euro y USDT para Venezuela.">
-    <meta name="theme-color" content="#0d1723">
+    <title>Monitor Bs.</title>
+    <meta name="description" content="Calculadora y monitor de tasas BCV, Euro y Binance P2P para Venezuela.">
+    <meta name="theme-color" content="#0a0b0d">
+    <meta name="color-scheme" content="dark light">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,415 +16,474 @@
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
     <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=2.2">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        // Aplica tema y color guardados antes de pintar, para evitar un parpadeo.
+        try {
+            var t = localStorage.getItem('monitor-dolar-theme');
+            if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.setAttribute('data-accent', localStorage.getItem('monitor-dolar-accent') || 'yellow');
+        } catch (e) { }
+    </script>
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="style.css?v=3.0">
 </head>
 
 <body>
+    <div class="app">
 
-    <!-- Tooltip / Info Sheet -->
-    <div id="tooltip-overlay" class="tooltip-overlay hidden" aria-hidden="true">
-        <div id="tooltip-sheet" class="tooltip-sheet">
-            <div class="tooltip-header">
-                <div class="tooltip-icon-wrap">
-                    <i data-lucide="info" class="w-4 h-4"></i>
+        <!-- ── Cabecera ── -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-logo"><i data-lucide="trending-up" class="ic"></i></div>
+                <div class="brand-text">
+                    <h1>Monitor <span>Bs.</span></h1>
+                    <p id="text-update">Actualizando...</p>
                 </div>
-                <h3 id="tooltip-title" class="tooltip-title"></h3>
-                <button id="tooltip-close" class="tooltip-close">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+            </div>
+            <div class="hdr-actions">
+                <span id="offline-badge" class="offline-badge hidden" title="Sin conexión">
+                    <i data-lucide="wifi-off" class="ic-xs"></i>
+                </span>
+                <button id="btn-refresh" class="icon-btn" type="button" title="Actualizar tasas" aria-label="Actualizar tasas">
+                    <i data-lucide="refresh-cw" class="ic" id="icon-refresh"></i>
+                </button>
+                <button id="hdr-calc" class="icon-btn" type="button" data-opens="calc-sheet" title="Calculadora" aria-label="Calculadora">
+                    <i data-lucide="calculator" class="ic"></i>
+                </button>
+                <button id="hdr-history" class="icon-btn" type="button" data-opens="history-sheet" title="Historial" aria-label="Historial">
+                    <i data-lucide="history" class="ic"></i>
+                </button>
+                <button id="hdr-settings" class="icon-btn" type="button" data-opens="settings-sheet" title="Configuración" aria-label="Configuración">
+                    <i data-lucide="settings" class="ic"></i>
                 </button>
             </div>
-            <p id="tooltip-body" class="tooltip-body"></p>
-        </div>
-    </div>
+        </header>
 
-    <!-- Calculadora (overlay) -->
-    <div id="calc-overlay" class="tooltip-overlay hidden" aria-hidden="true">
-        <div id="calc-sheet" class="tooltip-sheet calc-sheet">
-            <div class="tooltip-header">
-                <div class="tooltip-icon-wrap">
-                    <i data-lucide="calculator" class="w-4 h-4"></i>
-                </div>
-                <h3 class="tooltip-title">Calculadora</h3>
-                <button id="calc-close" class="tooltip-close">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
-            </div>
+        <main class="app-main">
 
-            <div class="calc-items hidden" id="calc-items"></div>
-
-            <div class="calc-display">
-                <div class="calc-expression" id="calc-expression">0</div>
-                <div class="calc-result" id="calc-result">&nbsp;</div>
-            </div>
-
-            <div class="calc-keypad">
-                <button class="calc-key calc-key-fn" data-key="C">C</button>
-                <button class="calc-key calc-key-fn" data-key="back">
-                    <i data-lucide="delete" class="w-4 h-4"></i>
-                </button>
-                <button class="calc-key calc-key-fn" data-key="%">%</button>
-                <button class="calc-key calc-key-op" data-key="/">÷</button>
-
-                <button class="calc-key" data-key="7">7</button>
-                <button class="calc-key" data-key="8">8</button>
-                <button class="calc-key" data-key="9">9</button>
-                <button class="calc-key calc-key-op" data-key="*">×</button>
-
-                <button class="calc-key" data-key="4">4</button>
-                <button class="calc-key" data-key="5">5</button>
-                <button class="calc-key" data-key="6">6</button>
-                <button class="calc-key calc-key-op" data-key="-">−</button>
-
-                <button class="calc-key" data-key="1">1</button>
-                <button class="calc-key" data-key="2">2</button>
-                <button class="calc-key" data-key="3">3</button>
-                <button class="calc-key calc-key-op" data-key="+">+</button>
-
-                <button class="calc-key calc-key-wide" data-key="0">0</button>
-                <button class="calc-key" data-key=".">.</button>
-                <button class="calc-key calc-key-eq" data-key="=">=</button>
-            </div>
-
-            <button id="btn-calc-use" class="btn-accent calc-use-btn">
-                Usar este total como Cantidad
-            </button>
-
-            <div class="calc-history hidden" id="calc-history"></div>
-        </div>
-    </div>
-
-    <!-- Configuración (overlay) -->
-    <div id="settings-overlay" class="tooltip-overlay hidden" aria-hidden="true">
-        <div class="tooltip-sheet settings-sheet">
-            <div class="tooltip-header">
-                <div class="tooltip-icon-wrap">
-                    <i data-lucide="settings" class="w-4 h-4"></i>
-                </div>
-                <h3 class="tooltip-title">Configuración</h3>
-                <button id="settings-close" class="tooltip-close">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
-            </div>
-
-            <div class="settings-body">
-                <!-- Notificaciones -->
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <p class="settings-row-title">Notificaciones</p>
-                        <p class="settings-row-sub">Avisos del navegador cuando la brecha supere tu límite</p>
+            <!-- ── Conversor ── -->
+            <section class="converter" id="converter">
+                <div class="conv-row">
+                    <div class="currency-wrap">
+                        <button id="btn-currency" class="currency-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Moneda del monto">
+                            <span id="currency-symbol">$</span>
+                            <i data-lucide="chevron-down" class="ic-xs"></i>
+                        </button>
+                        <div id="currency-menu" class="currency-menu hidden" role="menu">
+                            <button type="button" role="menuitem" data-currency="usd"><span class="cm-sym">$</span>Dólares</button>
+                            <button type="button" role="menuitem" data-currency="eur"><span class="cm-sym">€</span>Euros</button>
+                            <button type="button" role="menuitem" data-currency="bs"><span class="cm-sym">Bs</span>Bolívares</button>
+                        </div>
                     </div>
-                    <button id="toggle-notifications" class="settings-switch" role="switch" aria-checked="false">
-                        <span class="settings-switch-knob"></span>
+                    <input id="input-amount" class="amount-input" type="text" inputmode="decimal" autocomplete="off"
+                        spellcheck="false" placeholder="0,00" value="1,00" aria-label="Monto">
+                    <button id="btn-direction" class="direction-pill" type="button" title="Cambiar dirección de cálculo">
+                        <span id="dir-from" class="dir-from">$</span>
+                        <i data-lucide="arrow-right" class="ic-xs"></i>
+                        <span id="dir-to">Bs</span>
                     </button>
                 </div>
 
-                <!-- Alerta de brecha -->
-                <div class="settings-section">
+                <div class="quick-row" id="quick-row">
+                    <button class="quick-btn" type="button" data-amount="10">10</button>
+                    <button class="quick-btn" type="button" data-amount="20">20</button>
+                    <button class="quick-btn" type="button" data-amount="30">30</button>
+                    <button class="quick-btn" type="button" data-amount="50">50</button>
+                    <button class="quick-btn" type="button" data-amount="100">100</button>
+                </div>
+
+                <div class="conv-actions" id="conv-actions">
+                    <p class="conv-hint" id="conv-hint"></p>
+                    <div class="conv-icons">
+                        <button id="act-share" class="icon-btn" type="button" data-opens="share-sheet" title="Compartir con datos de pago" aria-label="Compartir">
+                            <i data-lucide="share-2" class="ic"></i>
+                        </button>
+                        <button id="act-copy" class="icon-btn" type="button" title="Copiar monto a tasa BCV" aria-label="Copiar monto a tasa BCV">
+                            <i data-lucide="copy" class="ic"></i>
+                        </button>
+                        <button id="act-paste" class="icon-btn" type="button" title="Pegar monto" aria-label="Pegar monto">
+                            <i data-lucide="clipboard-paste" class="ic"></i>
+                        </button>
+                        <button id="act-clear" class="icon-btn" type="button" title="Borrar monto" aria-label="Borrar monto">
+                            <i data-lucide="eraser" class="ic"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── Diferencia a tasa (USDT a vender) ── -->
+            <section class="hero-card" id="hero">
+                <div class="hero-top">
+                    <span class="pulse-dot"></span>
+                    <span class="hero-label">Diferencia a tasa</span>
+                </div>
+                <div class="hero-value-row">
+                    <p class="hero-value" id="eq-usdt">--</p>
+                    <button id="btn-copy-usdt" class="icon-btn icon-btn-accent" type="button" title="Copiar USDT" aria-label="Copiar USDT">
+                        <i data-lucide="copy" class="ic" id="icon-copy"></i>
+                    </button>
+                </div>
+                <p class="hero-sub">Para cubrir <strong id="sub-amount">1 $</strong> a tasa BCV vendiendo USDT en Binance</p>
+                <button id="btn-binance-p2p" class="binance-btn" type="button">
+                    <i data-lucide="external-link" class="ic-sm"></i>
+                    Copiar monto y abrir Binance P2P
+                </button>
+            </section>
+
+            <!-- ── Tasas ── -->
+            <section class="rates-section">
+                <div class="rates-header">
+                    <h2 class="section-label">Tasas</h2>
+                    <span class="rate-date-badge" id="rate-date-badge"></span>
+                    <div class="view-toggle" id="view-toggle" role="group" aria-label="Vista de tasas">
+                        <button type="button" data-view="grid" title="Cuadrícula" aria-label="Vista en cuadrícula">
+                            <i data-lucide="layout-grid" class="ic-sm"></i>
+                        </button>
+                        <button type="button" data-view="list" title="Lista" aria-label="Vista en lista">
+                            <i data-lucide="list" class="ic-sm"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="rates-grid" id="rates-grid"></div>
+                <p class="rates-hint">Pulsa sobre las tasas para copiarlas al portapapeles</p>
+
+                <div id="error-msg" class="error-box hidden" role="status">
+                    <i data-lucide="info" class="ic-sm"></i>
+                    <p id="error-text"></p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ══════════════ Calculadora ══════════════ -->
+    <div id="calc-sheet" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="calc-title">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <span class="sheet-icon"><i data-lucide="calculator" class="ic"></i></span>
+                <h3 id="calc-title">Calculadora</h3>
+                <div class="sheet-header-actions">
+                    <button id="calc-history-toggle" class="icon-btn" type="button" title="Historial de operaciones" aria-label="Historial de operaciones">
+                        <i data-lucide="history" class="ic"></i>
+                    </button>
+                    <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                        <i data-lucide="x" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sheet-body calc-body">
+                <div class="calc-display">
+                    <div class="calc-display-top">
+                        <button id="calc-save-rate" class="mini-btn" type="button">
+                            <i data-lucide="bookmark-plus" class="ic-xs"></i>Guardar como tasa
+                        </button>
+                        <button id="calc-paste" class="mini-btn" type="button">
+                            <i data-lucide="clipboard-paste" class="ic-xs"></i>Pegar
+                        </button>
+                    </div>
+                    <div class="calc-items hidden" id="calc-items"></div>
+                    <div class="calc-expression" id="calc-expression"></div>
+                    <div class="calc-main" id="calc-main">0</div>
+                </div>
+
+                <div id="calc-history-panel" class="calc-history-panel hidden">
+                    <div class="calc-history-head">
+                        <p class="chips-label">Historial de operaciones</p>
+                        <button id="calc-history-clear" class="link-btn" type="button">Borrar</button>
+                    </div>
+                    <div id="calc-history-list" class="calc-history-list"></div>
+                </div>
+
+                <div id="calc-chips-block" class="calc-chips-block">
+                    <p class="chips-label">Tasas de cambio · toca para insertar</p>
+                    <div class="chips-row" id="calc-chips-current"></div>
+                    <p class="chips-label">Tasas anteriores · toca para insertar</p>
+                    <div class="chips-row" id="calc-chips-prev"></div>
+                </div>
+
+                <div class="calc-keypad">
+                    <button type="button" class="key key-fn" data-key="C">C</button>
+                    <button type="button" class="key key-fn" data-key="sign">±</button>
+                    <button type="button" class="key key-fn" data-key="%">%</button>
+                    <button type="button" class="key key-op" data-key="/">÷</button>
+
+                    <button type="button" class="key" data-key="7">7</button>
+                    <button type="button" class="key" data-key="8">8</button>
+                    <button type="button" class="key" data-key="9">9</button>
+                    <button type="button" class="key key-op" data-key="*">×</button>
+
+                    <button type="button" class="key" data-key="4">4</button>
+                    <button type="button" class="key" data-key="5">5</button>
+                    <button type="button" class="key" data-key="6">6</button>
+                    <button type="button" class="key key-op" data-key="-">−</button>
+
+                    <button type="button" class="key" data-key="1">1</button>
+                    <button type="button" class="key" data-key="2">2</button>
+                    <button type="button" class="key" data-key="3">3</button>
+                    <button type="button" class="key key-op" data-key="+">+</button>
+
+                    <button type="button" class="key key-fn" data-key="back" aria-label="Borrar">
+                        <i data-lucide="delete" class="ic-md"></i>
+                    </button>
+                    <button type="button" class="key" data-key="0">0</button>
+                    <button type="button" class="key" data-key=".">,</button>
+                    <button type="button" class="key key-eq" data-key="=">=</button>
+                </div>
+            </div>
+
+            <div class="sheet-footer">
+                <button id="btn-calc-use" class="btn-primary" type="button">Usar como monto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ Historial ══════════════ -->
+    <div id="history-sheet" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <span class="sheet-icon"><i data-lucide="history" class="ic"></i></span>
+                <h3 id="history-title">Historial</h3>
+                <div class="sheet-header-actions">
+                    <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                        <i data-lucide="x" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <div class="history-filters">
+                    <input type="date" id="history-start" class="field-input" aria-label="Fecha inicio">
+                    <span class="history-sep">al</span>
+                    <input type="date" id="history-end" class="field-input" aria-label="Fecha fin">
+                </div>
+                <div class="history-actions">
+                    <button id="history-reset" class="link-btn" type="button">Última semana</button>
+                    <div class="history-export">
+                        <button id="history-export-csv" class="chip-btn" type="button">
+                            <i data-lucide="download" class="ic-xs"></i>CSV
+                        </button>
+                        <button id="history-export-xlsx" class="chip-btn chip-btn-green" type="button">
+                            <i data-lucide="file-spreadsheet" class="ic-xs"></i>Excel
+                        </button>
+                    </div>
+                </div>
+                <div id="history-list" class="history-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ Compartir ══════════════ -->
+    <div id="share-sheet" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="share-title">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <span class="sheet-icon"><i data-lucide="share-2" class="ic"></i></span>
+                <h3 id="share-title">Compartir tasa</h3>
+                <div class="sheet-header-actions">
+                    <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                        <i data-lucide="x" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <div class="seg seg-lg" id="share-method" role="tablist">
+                    <button type="button" role="tab" data-method="pm">
+                        <i data-lucide="smartphone" class="ic-sm"></i>Pago Móvil
+                    </button>
+                    <button type="button" role="tab" data-method="tr">
+                        <i data-lucide="landmark" class="ic-sm"></i>Transferencia
+                    </button>
+                </div>
+
+                <div class="share-fields" id="share-fields-pm">
+                    <input class="field-input" data-field="pm.bank" type="text" placeholder="Banco (ej. Banesco)" autocomplete="off">
+                    <input class="field-input" data-field="pm.phone" type="tel" placeholder="Teléfono (ej. 04141234567)" autocomplete="off">
+                    <input class="field-input" data-field="pm.id" type="text" placeholder="Cédula / RIF" autocomplete="off">
+                </div>
+                <div class="share-fields hidden" id="share-fields-tr">
+                    <input class="field-input" data-field="tr.bank" type="text" placeholder="Banco (ej. Banesco)" autocomplete="off">
+                    <input class="field-input" data-field="tr.account" type="text" inputmode="numeric" placeholder="Número de cuenta (20 dígitos)" autocomplete="off">
+                    <input class="field-input" data-field="tr.holder" type="text" placeholder="Titular" autocomplete="off">
+                    <input class="field-input" data-field="tr.id" type="text" placeholder="Cédula / RIF" autocomplete="off">
+                </div>
+
+                <p class="share-label">Selecciona las tasas a incluir:</p>
+                <div class="select-list" id="share-rates"></div>
+            </div>
+            <div class="sheet-footer">
+                <button id="btn-share-send" class="btn-primary" type="button">
+                    <i data-lucide="share-2" class="ic"></i>Compartir / Copiar datos
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ Configuración ══════════════ -->
+    <div id="settings-sheet" class="sheet-overlay hidden" aria-hidden="true">
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+                <span class="sheet-icon"><i data-lucide="settings" class="ic"></i></span>
+                <h3 id="settings-title">Configuración</h3>
+                <div class="sheet-header-actions">
+                    <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                        <i data-lucide="x" class="ic"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="sheet-body settings-body">
+
+                <p class="settings-group-label">Apariencia</p>
+                <div class="settings-card">
                     <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="moon" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Tema oscuro</p>
+                        </div>
+                        <button id="toggle-theme" class="switch" type="button" role="switch" aria-checked="false" aria-label="Tema oscuro">
+                            <span class="switch-knob"></span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="palette" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Color</p>
+                        </div>
+                        <div class="seg seg-sm" id="accent-seg">
+                            <button type="button" data-accent="yellow"><span class="swatch swatch-yellow"></span>Amarillo</button>
+                            <button type="button" data-accent="green"><span class="swatch swatch-green"></span>Verde</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="layout-grid" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Vista de tasas</p>
+                        </div>
+                        <div class="seg seg-sm" id="view-seg">
+                            <button type="button" data-view="grid">Cuadrícula</button>
+                            <button type="button" data-view="list">Lista</button>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="settings-group-label">Alertas</p>
+                <div class="settings-card">
+                    <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="bell" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Notificaciones</p>
+                            <p class="settings-row-sub">Avisos del navegador al superar tu límite de brecha</p>
+                        </div>
+                        <button id="toggle-notifications" class="switch" type="button" role="switch" aria-checked="false" aria-label="Notificaciones">
+                            <span class="switch-knob"></span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="scale" class="ic-sm"></i></span>
                         <div class="settings-row-text">
                             <p class="settings-row-title">Alerta de brecha</p>
                             <p class="settings-row-sub">Resalta la tarjeta Brecha al superar el %</p>
                         </div>
-                        <button id="toggle-gap-alert" class="settings-switch" role="switch" aria-checked="false">
-                            <span class="settings-switch-knob"></span>
+                        <button id="toggle-gap-alert" class="switch" type="button" role="switch" aria-checked="false" aria-label="Alerta de brecha">
+                            <span class="switch-knob"></span>
                         </button>
                     </div>
                     <div id="gap-alert-fields" class="settings-fields hidden">
-                        <div class="settings-input-wrap">
-                            <i data-lucide="percent" class="w-3.5 h-3.5 settings-input-icon"></i>
-                            <input type="number" id="input-gap-threshold" class="settings-input" placeholder="Ej. 40" min="0" step="any">
+                        <div class="field-icon-wrap">
+                            <i data-lucide="percent" class="ic-sm"></i>
+                            <input type="number" id="input-gap-threshold" class="field-input" placeholder="Límite en % (ej. 40)" min="0" step="any">
                         </div>
                     </div>
                 </div>
 
-                <!-- Tasa personalizada -->
-                <div class="settings-section">
+                <p class="settings-group-label">Tasa personalizada</p>
+                <div class="settings-card">
                     <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="tag" class="ic-sm"></i></span>
                         <div class="settings-row-text">
-                            <p class="settings-row-title">Tasa personalizada</p>
-                            <p class="settings-row-sub">Agrega una 5ta tarjeta con tu propia tasa</p>
+                            <p class="settings-row-title">Mostrar en el tablero</p>
+                            <p class="settings-row-sub">Una tarjeta extra con tu propia tasa</p>
                         </div>
-                        <button id="toggle-custom-rate" class="settings-switch" role="switch" aria-checked="false">
-                            <span class="settings-switch-knob"></span>
+                        <button id="toggle-custom-rate" class="switch" type="button" role="switch" aria-checked="false" aria-label="Tasa personalizada">
+                            <span class="switch-knob"></span>
                         </button>
                     </div>
                     <div id="custom-rate-fields" class="settings-fields hidden">
-                        <div class="settings-input-wrap">
-                            <i data-lucide="tag" class="w-3.5 h-3.5 settings-input-icon"></i>
-                            <input type="text" id="input-custom-rate-name" class="settings-input" placeholder="Nombre (ej. Mi Tasa)" maxlength="24">
-                        </div>
-                        <div class="settings-input-wrap">
-                            <i data-lucide="calculator" class="w-3.5 h-3.5 settings-input-icon"></i>
-                            <input type="number" id="input-custom-rate-value" class="settings-input" placeholder="Valor en Bs/$" min="0" step="any">
-                        </div>
+                        <input type="text" id="input-custom-rate-name" class="field-input" placeholder="Nombre (ej. Mi tasa)" maxlength="24">
+                        <input type="number" id="input-custom-rate-value" class="field-input" placeholder="Valor en Bs por $" min="0" step="any">
                     </div>
                 </div>
 
-                <p class="settings-version">Monitor Bs. · v2.2.0</p>
+                <p class="settings-group-label">Ayuda</p>
+                <div class="settings-card">
+                    <button id="btn-open-whats-new" class="settings-row settings-row-btn" type="button">
+                        <span class="settings-row-icon"><i data-lucide="sparkles" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">¿Qué hay de nuevo?</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
+                    </button>
+                    <button id="btn-open-tour" class="settings-row settings-row-btn" type="button">
+                        <span class="settings-row-icon"><i data-lucide="book-open" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Ver guía de uso</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
+                    </button>
+                </div>
+
+                <p class="settings-version" id="settings-version"></p>
             </div>
         </div>
     </div>
 
-    <!-- Toast de confirmación -->
-    <div id="toast" class="toast hidden">
+    <!-- ══════════════ ¿Qué hay de nuevo? ══════════════ -->
+    <div id="whats-new" class="modal-overlay hidden" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
+            <div class="modal-header">
+                <span class="sheet-icon"><i data-lucide="rocket" class="ic"></i></span>
+                <div>
+                    <h3 id="whats-new-title">¿Qué hay de nuevo?</h3>
+                    <p class="modal-kicker" id="whats-new-version"></p>
+                </div>
+                <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                    <i data-lucide="x" class="ic"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="whats-new-list"></div>
+            <div class="modal-footer">
+                <button id="whats-new-tour" class="btn-ghost" type="button">Ver guía</button>
+                <button id="whats-new-ok" class="btn-primary" type="button">¡Entendido!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite">
         <span class="toast-dot"></span>
         <span id="toast-text"></span>
     </div>
 
     <!-- Banner PWA -->
     <div id="install-banner" class="install-banner hidden">
-        <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shrink-0">
-                <i data-lucide="smartphone" class="w-4 h-4 text-white"></i>
-            </div>
+        <div class="install-banner-text">
+            <span class="brand-logo"><i data-lucide="smartphone" class="ic-sm"></i></span>
             <div>
-                <p class="text-sm font-semibold text-primary">Instalar app</p>
-                <p class="text-xs text-tertiary">Acceso rápido desde tu pantalla</p>
+                <p class="install-title">Instalar app</p>
+                <p class="install-sub">Acceso rápido desde tu pantalla</p>
             </div>
         </div>
-        <div class="flex gap-2 shrink-0">
-            <button id="btn-install-dismiss" class="btn-ghost text-xs px-3 py-1.5">No</button>
-            <button id="btn-install" class="btn-accent text-xs px-4 py-1.5 font-semibold">Instalar</button>
+        <div class="install-banner-actions">
+            <button id="btn-install-dismiss" class="btn-ghost btn-sm" type="button">No</button>
+            <button id="btn-install" class="btn-primary btn-sm" type="button">Instalar</button>
         </div>
     </div>
 
-    <!-- Card principal -->
-    <div class="app-card">
-
-        <!-- Cabecera -->
-        <div class="app-header">
-            <div class="flex items-center gap-2">
-                <div class="header-logo">
-                    <i data-lucide="trending-up" class="w-4 h-4"></i>
-                </div>
-                <div>
-                    <h1 class="text-[15px] font-semibold text-primary leading-none">Monitor Bs.</h1>
-                    <p class="text-[11px] text-tertiary mt-0.5 leading-none" id="text-update">Actualizando...</p>
-                </div>
-                <div id="offline-badge" class="hidden offline-badge">
-                    <i data-lucide="wifi-off" class="w-3 h-3"></i>
-                    <span>Offline</span>
-                </div>
-            </div>
-            <div class="flex items-center gap-1">
-                <button id="btn-theme" class="icon-btn" title="Cambiar tema">
-                    <i data-lucide="sun" class="w-4 h-4" id="icon-theme"></i>
-                </button>
-                <button id="btn-refresh" class="icon-btn" title="Actualizar">
-                    <i data-lucide="refresh-cw" class="w-4 h-4" id="icon-refresh"></i>
-                </button>
-                <button id="btn-settings" class="icon-btn" title="Configuración">
-                    <i data-lucide="settings" class="w-4 h-4"></i>
-                </button>
-            </div>
-        </div>
-
-        <!-- Input Calculadora -->
-        <div class="input-section">
-            <!-- Label con botón ? + quick amounts en la misma fila -->
-            <div class="section-label-row">
-                <label class="section-label">Cantidad</label>
-                <button class="help-btn" data-tip="cantidad">
-                    <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                </button>
-                <!-- Botones rápidos de monto (inline) -->
-                <div class="quick-amounts-inline">
-                    <button class="quick-btn" data-amount="10">10</button>
-                    <button class="quick-btn" data-amount="20">20</button>
-                    <button class="quick-btn" data-amount="30">30</button>
-                    <button class="quick-btn" data-amount="50">50</button>
-                    <button class="quick-btn" data-amount="100">100</button>
-                </div>
-            </div>
-            <div class="input-wrap">
-                <button id="btn-currency-mode" class="input-prefix-btn" title="Cambiar modo">
-                    <span id="currency-mode-label">USD / EUR</span>
-                    <i data-lucide="arrow-left-right" class="w-3 h-3 ml-1 opacity-50"></i>
-                </button>
-                <input type="number" id="input-amount" value="1" min="0" step="any" placeholder="0" class="calc-input"
-                    inputmode="decimal">
-                <button id="btn-open-calc" class="input-calc-btn" title="Abrir calculadora">
-                    <i data-lucide="calculator" class="w-4 h-4"></i>
-                </button>
-            </div>
-
-            <!-- Resultado estrella -->
-            <div class="usdt-hero">
-                <div class="usdt-hero-content">
-                    <!-- Fila superior: etiqueta + selector de nombre + help -->
-                    <div class="usdt-top-row">
-                        <span class="pulse-dot"></span>
-                        <span class="usdt-label-text">Diferencia a tasa</span>
-                        <button class="help-btn help-btn-yellow" data-tip="usdt">
-                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-
-                    <!-- Valor grande + compartir + copiar -->
-                    <div class="usdt-value-row">
-                        <p class="usdt-value" id="eq-usdt">--</p>
-                        <button id="btn-share" class="copy-btn" title="Compartir">
-                            <i data-lucide="share-2" class="w-4 h-4" id="icon-share"></i>
-                        </button>
-                        <button id="btn-copy-usdt" class="copy-btn" title="Copiar">
-                            <i data-lucide="copy" class="w-4 h-4" id="icon-copy"></i>
-                        </button>
-                    </div>
-
-                    <!-- Sub-explicación -->
-                    <p class="usdt-sub">
-                        Para cubrir <strong id="sub-amount">1 USD</strong> a tasa BCV vendiendo USDT en Binance
-                    </p>
-
-                    <!-- Acción rápida: copiar monto y abrir Binance P2P -->
-                    <button id="btn-binance-p2p" class="binance-action-btn">
-                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-                        Copiar monto y abrir Binance P2P
-                    </button>
-                </div>
-            </div>
-        </div>
-
-
-        <!-- Grid de tasas -->
-        <div class="rates-section">
-            <!-- Cabecera de tasas -->
-            <div class="rates-header">
-                <div class="rates-title-row">
-                    <p class="section-label">Tasas</p>
-                    <span class="rate-date-badge" id="rate-date-badge"></span>
-                </div>
-            </div>
-            <div class="rates-grid" id="rates-grid">
-
-                <!-- BCV -->
-                <div class="rate-card red" data-rate="bcv">
-                    <div class="rate-header">
-                        <span class="rate-tag red">BCV</span>
-                        <button class="help-btn" data-tip="bcv">
-                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-                    <p class="rate-value" id="total-bcv">--</p>
-                    <p class="rate-base"><span id="base-bcv">--</span> Bs/$</p>
-                    <p class="rate-change" id="change-bcv"></p>
-                </div>
-
-                <!-- Binance -->
-                <div class="rate-card yellow" data-rate="binance">
-                    <div class="rate-header">
-                        <span class="rate-tag yellow">Binance</span>
-                        <button class="help-btn" data-tip="binance">
-                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-                    <p class="rate-value" id="total-binance">--</p>
-                    <p class="rate-base"><span id="base-binance">--</span> Bs/$</p>
-                    <p class="rate-change" id="change-binance"></p>
-                </div>
-
-                <!-- Euro -->
-                <div class="rate-card blue" data-rate="euro">
-                    <div class="rate-header">
-                        <span class="rate-tag blue">Euro BCV</span>
-                        <button class="help-btn" data-tip="euro">
-                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-                    <p class="rate-value" id="total-euro">--</p>
-                    <p class="rate-base"><span id="base-euro">--</span> Bs/€</p>
-                    <p class="rate-change" id="change-euro"></p>
-                </div>
-
-                <!-- Brecha -->
-                <div class="rate-card gap-card" id="gap-card">
-                    <div class="rate-header">
-                        <span class="rate-tag gap">Brecha</span>
-                        <div class="rate-header-actions">
-                            <button id="btn-gap-alert" class="help-btn" title="Configurar alerta de brecha">
-                                <i data-lucide="bell" class="w-3.5 h-3.5"></i>
-                            </button>
-                            <button class="help-btn" data-tip="brecha">
-                                <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="diff-pct" class="gap-pct">--</div>
-                    <p class="gap-bs" id="diff-bs">--</p>
-                </div>
-
-                <!-- Tasa personalizada (opcional, desde Configuración) -->
-                <div class="rate-card purple hidden" id="custom-rate-card" data-rate="custom">
-                    <div class="rate-header">
-                        <span class="rate-tag purple" id="custom-rate-tag">Personalizada</span>
-                        <button id="btn-custom-rate-edit" class="help-btn" title="Editar tasa personalizada">
-                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                        </button>
-                    </div>
-                    <p class="rate-value" id="total-custom">--</p>
-                    <p class="rate-base"><span id="base-custom">--</span> Bs/$</p>
-                </div>
-
-            </div>
-
-            <!-- Euro en USDT — oculto por ahora -->
-            <div class="extra-row hidden">
-                <span id="eq-usdt-euro"></span>
-            </div>
-
-            <!-- Historial -->
-            <div class="flex flex-col gap-1 history-wrap">
-                <button id="history-toggle" class="history-toggle-btn">
-                    <div class="flex items-center gap-2">
-                        <span class="section-label history-toggle-label">Historial</span>
-                        <span class="history-badge" id="history-badge">Últimos datos</span>
-                    </div>
-                    <i data-lucide="chevron-down" class="w-3.5 h-3.5" id="history-chevron"></i>
-                </button>
-
-                <div id="history-panel" class="history-panel hidden">
-                    <div class="history-filters">
-                        <input type="date" id="history-start" class="history-date-input" title="Fecha inicio">
-                        <span class="history-filters-sep">al</span>
-                        <input type="date" id="history-end" class="history-date-input" title="Fecha fin">
-                    </div>
-                    <div class="history-actions">
-                        <button id="history-reset" class="history-reset-btn">Última semana</button>
-                        <div class="flex items-center gap-2">
-                            <button id="history-export-csv" class="history-export-btn">
-                                <i data-lucide="download" class="w-3.5 h-3.5"></i> CSV
-                            </button>
-                            <button id="history-export-xlsx" class="history-export-btn history-export-xlsx">
-                                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i> Excel
-                            </button>
-                        </div>
-                    </div>
-                    <div id="history-list" class="history-list"></div>
-                </div>
-            </div>
-
-            <!-- Error -->
-            <div id="error-msg" class="hidden error-box">
-                <i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400"></i>
-                <p id="error-text"></p>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="app-footer">
-            <button id="btn-main" class="btn-main">
-                <i data-lucide="calculator" class="w-4 h-4" id="icon-main"></i>
-                <span id="text-main">Actualizar Monitor</span>
-            </button>
-        </div>
-
-    </div>
-
-    <script src="app.js?v=2.2"></script>
+    <script src="app.js?v=3.0"></script>
 </body>
 
 </html>

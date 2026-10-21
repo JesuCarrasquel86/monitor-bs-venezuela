@@ -1,865 +1,96 @@
 /* ============================================================
-   app.js – Monitor Dólar Venezuela PWA
-   Lógica de negocio + Dark/Light Mode + Service Worker
+   app.js – Monitor Bs. (PWA)
    ============================================================ */
 
 'use strict';
 
-// ── Contenido de los tooltips ─────────────────────────────────
-const TIPS = {
-    'cantidad': {
-        title: '¿Qué es la Cantidad?',
-        body: 'Es el monto en divisas (USD o EUR) que quieres convertir. Por ejemplo, si colocas 5, la app te muestra cuántos Bolívares equivalen a 5 dólares o 5 euros a cada tasa, y cuántos USDT necesitas retirar de Binance para cubrir ese monto.'
-    },
-    'usdt': {
-        title: '¿Qué significa "Debes sacar en Binance"?',
-        body: 'Es la cantidad de USDT que necesitas vender en Binance P2P para obtener los Bolívares equivalentes al monto que colocaste, pero calculado a la tasa oficial BCV. Divide el total en Bs. (a tasa BCV) entre la tasa del mercado paralelo para darte el equivalente real en USDT.'
-    },
-    'bcv': {
-        title: '¿Qué es la tasa BCV?',
-        body: 'Es la tasa oficial publicada por el Banco Central de Venezuela (BCV). Sirve como referencia legal para transacciones formales. Es la tasa que usan bancos, nóminas y contratos. Generalmente es más baja que la tasa del mercado paralelo.'
-    },
-    'binance': {
-        title: '¿Qué es la tasa Binance (Paralelo)?',
-        body: 'Es el precio del dólar en el mercado libre, obtenido a partir del mercado P2P de Binance en Venezuela. Refleja el precio real al que puedes comprar o vender USDT (dólares digitales) hoy. Suele ser más alta que el BCV porque no está regulada.'
-    },
-    'euro': {
-        title: '¿Qué es el Euro BCV?',
-        body: 'Es la tasa oficial del Euro publicada por el Banco Central de Venezuela. Es la referencia legal para transacciones en euros dentro del territorio venezolano. Se actualiza diariamente igual que la tasa del dólar BCV.'
-    },
-    'brecha': {
-        title: '¿Qué es la Brecha?',
-        body: 'Es la diferencia entre la tasa del mercado paralelo (Binance) y la tasa oficial BCV. Se expresa en Bs. y en porcentaje (%). Un 44% de brecha significa que el dólar en el mercado libre cuesta 44% más que el dólar oficial. Es un indicador clave de la distorsión cambiaria.'
-    },
-    'euro-usdt': {
-        title: '¿Qué es Euro en USDT?',
-        body: 'Es la cantidad de USDT que necesitas vender en Binance para obtener los Bolívares que equivalen al monto en Euros a tasa BCV. Útil cuando recibes pagos en euros y necesitas saber cuánto USDT retirar para cubrir esa cantidad en Bs.'
-    }
+const APP_VERSION = '3.0.0';
+console.log(`monitor-bs-vz v${APP_VERSION} starting...`);
+
+// ── Claves de almacenamiento (se conservan las de versiones anteriores) ──
+const KEYS = {
+    data: 'monitor-dolar-data',
+    theme: 'monitor-dolar-theme',
+    accent: 'monitor-dolar-accent',
+    history: 'monitor-dolar-history',
+    customRate: 'monitor-dolar-custom-rate',
+    calcHistory: 'monitor-dolar-calc-history',
+    gapThreshold: 'monitor-dolar-gap-threshold',
+    gapAlertSent: 'monitor-dolar-gap-alert-sent',
+    notifications: 'notifications-enabled',
+    view: 'monitor-dolar-view',
+    currency: 'monitor-dolar-currency',
+    share: 'monitor-dolar-share',
+    onboarding: 'monitor-dolar-onboarding-done',
+    whatsNew: 'monitor-dolar-whats-new-seen',
+    backfill: 'monitor-dolar-backfill',
+    installDismissed: 'pwa-install-dismissed',
 };
 
-// ── Setup tooltips ────────────────────────────────────────────
-const setupTooltips = () => {
-    const overlay = document.getElementById('tooltip-overlay');
-    const title = document.getElementById('tooltip-title');
-    const body = document.getElementById('tooltip-body');
-    const closeBtn = document.getElementById('tooltip-close');
-
-    const showTip = (key) => {
-        const tip = TIPS[key];
-        if (!tip) return;
-        title.textContent = tip.title;
-        body.textContent = tip.body;
-        overlay.classList.remove('hidden');
-        overlay.setAttribute('aria-hidden', 'false');
-    };
-
-    const hideTip = () => {
-        overlay.classList.add('hidden');
-        overlay.setAttribute('aria-hidden', 'true');
-    };
-
-    // Cerrar con botón X
-    closeBtn?.addEventListener('click', hideTip);
-
-    // Cerrar al tocar el fondo oscuro (fuera del sheet)
-    overlay?.addEventListener('click', (e) => {
-        if (e.target === overlay) hideTip();
-    });
-
-    // Cerrar con Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') hideTip();
-    });
-
-    // Asignar a todos los botones ?
-    document.querySelectorAll('.help-btn[data-tip]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showTip(btn.dataset.tip);
-            lucide.createIcons();
-        });
-    });
+// localStorage puede fallar (modo privado, cuota llena): nunca debe romper la app
+const store = {
+    get(key, fallback = null) {
+        try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
+    },
+    set(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { }
+    },
+    remove(key) {
+        try { localStorage.removeItem(key); } catch (e) { }
+    },
+    getJSON(key, fallback) {
+        try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+    },
+    setJSON(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
+    },
 };
 
+// ── Estado ────────────────────────────────────────────────────
+const DEFAULT_RATES = { bcv: 419.99, binance: 604.78, euro: 495.61 };
 
-let data = { bcv: 419.99, binance: 604.78, euro: 495.61, amount: 1 };
+let data = { ...DEFAULT_RATES, amount: 1 };
+let inputCurrency = 'usd';  // moneda en la que se escribe el monto: 'usd' | 'eur' | 'bs'
+let lastForeign = 'usd';    // última divisa usada, para volver desde Bs con el botón de dirección
 let isLoading = false;
-let convMode = 'usd';     // 'usd' = entrada USD/EUR → Bs | 'bs' = entrada Bs → USD
+let rateDate = null;        // fecha oficial de la tasa BCV (Date)
+let lastFetchAt = null;     // momento de la última consulta exitosa (Date)
+let hasFetchedOnce = false; // evita comparar la 1ra tasa real contra los valores placeholder
+let sessionPrev = null;     // tasas antes de la última consulta de esta sesión
+let prevRates = null;       // tasas del día anterior según el historial
+let lastUsdtNeeded = 0;
+let customRate = { enabled: false, name: 'Mi tasa', value: 0 };
+let viewMode = 'grid';
 let deferredInstallPrompt = null;
-let rateDate = null;       // fecha de la tasa actual (Date object o null)
-let lastUsdtNeeded = 0;    // último "USDT a vender" calculado, para copiar/abrir Binance
-let hasFetchedOnce = false; // evita comparar la 1ra tasa real contra el valor placeholder inicial
-let rateChanges = { bcv: null, binance: null, euro: null }; // cambio vs. la tasa anterior
-let customRate = { enabled: false, name: 'Personalizada', value: 0 };
 
-
-// ── Formato número venezolano ─────────────────────────────────
-const formatBs = (val) =>
-    new Intl.NumberFormat('es-VE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(val);
-
-const formatUsdt = (val) =>
-    new Intl.NumberFormat('es-VE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 4
-    }).format(val);
-
-// Diferencia entre una tasa y la anterior, para el badge ▲/▼ de cada tarjeta
-const computeRateChange = (prev, curr) => {
-    if (!prev || !curr) return null;
-    const abs = curr - prev;
-    const pct = prev > 0 ? (abs / prev) * 100 : 0;
-    return { abs, pct };
+const CURRENCY = {
+    usd: { sym: '$', name: 'Dólares' },
+    eur: { sym: '€', name: 'Euros' },
+    bs: { sym: 'Bs', name: 'Bolívares' },
 };
 
-// ── Persistencia ─────────────────────────────────────────────
-console.log('monitor-bs-vz v2.2.0 starting...');
-const STORAGE_KEY = 'monitor-dolar-data';
-const THEME_KEY = 'monitor-dolar-theme';
-const HISTORY_KEY = 'monitor-dolar-history'; // historial diario: { 'YYYY-MM-DD': { bcv, binance, euro } }
-
-const saveToStorage = () => {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            bcv: data.bcv, binance: data.binance, euro: data.euro,
-            savedAt: new Date().toISOString()
-        }));
-    } catch (e) { }
+const RATE_DEFS = {
+    bcv: { title: 'BCV Dólar', chip: 'BCV $', icon: 'dollar-sign', color: 'green', sym: '$' },
+    euro: { title: 'BCV Euro', chip: 'BCV €', icon: 'euro', color: 'blue', sym: '€' },
+    binance: { title: 'Binance P2P', chip: 'P2P', icon: 'wallet', color: 'yellow', sym: 'USDT' },
+    custom: { title: 'Personalizada', chip: 'Mía', icon: 'tag', color: 'purple', sym: '$' },
 };
 
-const loadFromStorage = () => {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return false;
-        const stored = JSON.parse(raw);
-        if (stored.bcv && stored.binance && stored.euro) {
-            data = { ...data, ...stored };
-            hasFetchedOnce = true;
-            return true;
-        }
-    } catch (e) { }
-    return false;
-};
+const CARD_ORDER = ['bcv', 'euro', 'binance', 'gap', 'custom'];
 
-// ── Guardar tasa del día en historial ─────────────────────────────────
-const saveHistoryEntry = (dateKey, entry) => {
-    try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        const history = raw ? JSON.parse(raw) : {};
-        history[dateKey] = { ...entry, savedAt: new Date().toISOString() };
-        // Mantener solo los últimos 14 días para no llenar localStorage
-        const keys = Object.keys(history).sort().slice(-14);
-        const trimmed = {};
-        keys.forEach(k => { trimmed[k] = history[k]; });
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
-    } catch (e) { }
-};
+// ── Formato (es-VE: 1.234,56) ─────────────────────────────────
+const numberFormat = (min, max) => new Intl.NumberFormat('es-VE', { minimumFractionDigits: min, maximumFractionDigits: max });
+const NF0 = numberFormat(0, 0);
+const NF2 = numberFormat(2, 2);
+const NF24 = numberFormat(2, 4);
+const NF06 = numberFormat(0, 6);
 
-// ── Tasa personalizada (5ta tarjeta, definida por el usuario) ─────────
-const CUSTOM_RATE_KEY = 'monitor-dolar-custom-rate';
+const formatBs = (v) => NF2.format(v);
+const formatUsdt = (v) => NF24.format(v);
+const formatCalc = (v) => NF06.format(v);
 
-const loadCustomRate = () => {
-    try {
-        const raw = localStorage.getItem(CUSTOM_RATE_KEY);
-        if (raw) customRate = { ...customRate, ...JSON.parse(raw) };
-    } catch (e) { }
-};
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-const saveCustomRate = () => {
-    try { localStorage.setItem(CUSTOM_RATE_KEY, JSON.stringify(customRate)); } catch (e) { }
-};
-
-// ── Dark / Light Mode ─────────────────────────────────────────
-const applyTheme = (theme) => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(THEME_KEY, theme);
-
-    // Actualizar ícono del botón
-    const iconTheme = document.getElementById('icon-theme');
-    if (iconTheme) {
-        iconTheme.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
-    }
-    // Actualizar meta theme-color
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-        metaTheme.content = theme === 'dark' ? '#0c0e12' : '#f0f2f5';
-    }
-    lucide.createIcons();
-};
-
-const setupThemeToggle = () => {
-    // Cargar tema guardado o preferencia del sistema
-    const saved = localStorage.getItem(THEME_KEY);
-    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    applyTheme(saved || preferred);
-
-    document.getElementById('btn-theme')?.addEventListener('click', () => {
-        const current = document.documentElement.getAttribute('data-theme');
-        applyTheme(current === 'dark' ? 'light' : 'dark');
-    });
-};
-
-// ── Animación pop ─────────────────────────────────────────────
-const popElement = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove('value-updated');
-    void el.offsetWidth;
-    el.classList.add('value-updated');
-};
-
-// ── Actualizar UI ─────────────────────────────────────────────
-const updateUI = () => {
-    const ph = '--';
-    const fmt = (v) => isLoading ? ph : formatBs(v);
-
-    // Brecha en % es independiente del monto/modo: solo depende de las tasas
-    const gapPct = data.bcv > 0 ? ((data.binance - data.bcv) / data.bcv) * 100 : 0;
-    if (!isLoading) checkGapAlert(gapPct);
-
-    if (convMode === 'usd') {
-        // ── USD/EUR → Bs (modo por defecto) ──
-        const totalBcv = data.bcv * data.amount;
-        const totalBinance = data.binance * data.amount;
-        const totalEuro = data.euro * data.amount;
-        const diffBs = totalBinance - totalBcv;
-        const diffPct = data.bcv > 0 ? (((data.binance - data.bcv) / data.bcv) * 100) : 0;
-        const eqUsdt = data.binance > 0 ? totalBcv / data.binance : 0;
-        const eqUsdtEuro = data.binance > 0 ? totalEuro / data.binance : 0;
-        lastUsdtNeeded = eqUsdt;
-
-        set('total-bcv', fmt(totalBcv));
-        set('total-euro', fmt(totalEuro));
-        set('total-binance', fmt(totalBinance));
-        set('base-bcv', formatBs(data.bcv));
-        set('base-euro', formatBs(data.euro));
-        set('base-binance', formatBs(data.binance));
-        set('diff-bs', isLoading ? ph : `+ ${formatBs(diffBs)}`);
-        set('diff-pct', isLoading ? ph : `+${diffPct.toFixed(2)}%`);
-        set('eq-usdt', isLoading ? ph : `${formatUsdt(eqUsdt)} USDT`);
-        set('eq-usdt-euro', isLoading ? ph : `${formatUsdt(eqUsdtEuro)} USDT`);
-        const sub = document.getElementById('sub-amount');
-        if (sub) sub.textContent = `${data.amount} USD`;
-
-        if (customRate.enabled) {
-            set('total-custom', fmt(customRate.value * data.amount));
-            set('base-custom', formatBs(customRate.value));
-        }
-
-    } else {
-        // ── Bs → USD (modo inverso como AirTM/Binance) ──
-        const usdAtBcv = data.bcv > 0 ? data.amount / data.bcv : 0;
-        const usdAtBinance = data.binance > 0 ? data.amount / data.binance : 0;
-        const eurAtBcv = data.euro > 0 ? data.amount / data.euro : 0;
-        const usdtNeeded = data.binance > 0 ? data.amount / data.binance : 0;
-        lastUsdtNeeded = usdtNeeded;
-        const diffUsd = usdAtBcv - usdAtBinance;
-        const diffPct = usdAtBinance > 0 ? (diffUsd / usdAtBinance) * 100 : 0;
-
-        set('total-bcv', isLoading ? ph : `${formatUsdt(usdAtBcv)} USD`);
-        set('total-binance', isLoading ? ph : `${formatUsdt(usdAtBinance)} USD`);
-        set('total-euro', isLoading ? ph : `${formatUsdt(eurAtBcv)} EUR`);
-        set('base-bcv', formatBs(data.bcv));
-        set('base-euro', formatBs(data.euro));
-        set('base-binance', formatBs(data.binance));
-        set('diff-bs', isLoading ? ph : `+${formatUsdt(diffUsd)} USD`);
-        set('diff-pct', isLoading ? ph : `+${diffPct.toFixed(2)}%`);
-        set('eq-usdt', isLoading ? ph : `${formatUsdt(usdtNeeded)} USDT`);
-        set('eq-usdt-euro', isLoading ? ph : `${formatUsdt(usdtNeeded)} USDT`);
-        const sub = document.getElementById('sub-amount');
-        if (sub) sub.textContent = `${formatBs(data.amount)} Bs`;
-
-        if (customRate.enabled) {
-            const usdAtCustom = customRate.value > 0 ? data.amount / customRate.value : 0;
-            set('total-custom', isLoading ? ph : `${formatUsdt(usdAtCustom)} USD`);
-            set('base-custom', formatBs(customRate.value));
-        }
-    }
-
-    // Tarjeta de tasa personalizada: mostrar/ocultar + nombre
-    const customCard = document.getElementById('custom-rate-card');
-    customCard?.classList.toggle('hidden', !customRate.enabled);
-    set('custom-rate-tag', customRate.name || 'Personalizada');
-
-    // Cambio vs. la tasa anterior (como Arco: ▲/▼ + Bs + %)
-    ['bcv', 'binance', 'euro'].forEach(key => {
-        const el = document.getElementById(`change-${key}`);
-        if (!el) return;
-        const chg = rateChanges[key];
-        if (!chg || isLoading) { el.textContent = ''; el.className = 'rate-change'; return; }
-        const dir = chg.abs > 0 ? 'up' : chg.abs < 0 ? 'down' : '';
-        const arrow = chg.abs > 0 ? '▲' : chg.abs < 0 ? '▼' : '▬';
-        el.textContent = `${arrow} ${formatBs(Math.abs(chg.abs))} Bs · ${Math.abs(chg.pct).toFixed(2)}%`;
-        el.className = `rate-change ${dir}`;
-    });
-
-    if (!isLoading) {
-        ['total-bcv', 'total-euro', 'total-binance', 'diff-bs', 'diff-pct', 'eq-usdt', 'eq-usdt-euro']
-            .forEach(id => popElement(id));
-    }
-
-    // Actualizar prefijo del input según modo
-    const currLabel = document.getElementById('currency-mode-label');
-    const currBtn = document.getElementById('btn-currency-mode');
-    if (currLabel) currLabel.textContent = convMode === 'usd' ? 'USD / EUR' : 'Bs.';
-    currBtn?.classList.toggle('mode-bs', convMode === 'bs');
-
-    lucide.createIcons();
-};
-
-
-// ── Helpers DOM ───────────────────────────────────────────────
-const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-
-// ── Toggle modo de divisa (USD/EUR ⇔ Bs.) ─────────────────────
-const setupCurrencyModeToggle = () => {
-    document.getElementById('btn-currency-mode')?.addEventListener('click', () => {
-        convMode = convMode === 'usd' ? 'bs' : 'usd';
-        // Reset input a 1 al cambiar modo
-        data.amount = 1;
-        const input = document.getElementById('input-amount');
-        if (input) { input.value = 1; input.select(); }
-        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
-        updateUI();
-    });
-};
-
-// ── Feedback visual temporal en un botón (ícono "check" y vuelta atrás) ──
-const flashIcon = (btn, icon, tempIcon, originalIcon, ms = 1800) => {
-    if (!icon) return;
-    btn?.classList.add('copied');
-    icon.setAttribute('data-lucide', tempIcon);
-    lucide.createIcons();
-    setTimeout(() => {
-        btn?.classList.remove('copied');
-        icon.setAttribute('data-lucide', originalIcon);
-        lucide.createIcons();
-    }, ms);
-};
-
-// ── Botón copiar USDT ──────────────────────────────────────────
-const setupCopyBtn = () => {
-    document.getElementById('btn-copy-usdt')?.addEventListener('click', () => {
-        const val = document.getElementById('eq-usdt')?.textContent;
-        if (!val || val === '--') return;
-        navigator.clipboard.writeText(val).then(() => {
-            flashIcon(document.getElementById('btn-copy-usdt'), document.getElementById('icon-copy'), 'check', 'copy');
-        }).catch(() => { });
-    });
-};
-
-// ── Botón compartir resumen ─────────────────────────────────────
-const buildShareText = () => {
-    const dir = convMode === 'usd' ? `${data.amount} USD/EUR` : `${formatBs(data.amount)} Bs`;
-    const bcvText = document.getElementById('total-bcv')?.textContent || '--';
-    const binanceText = document.getElementById('total-binance')?.textContent || '--';
-    const gapText = document.getElementById('diff-pct')?.textContent || '--';
-    const eqText = document.getElementById('eq-usdt')?.textContent || '--';
-    return [
-        `Monitor Bs. — ${dir}`,
-        `BCV: ${bcvText}`,
-        `Binance: ${binanceText}`,
-        `Brecha: ${gapText}`,
-        `USDT a vender en Binance: ${eqText}`,
-    ].join('\n');
-};
-
-const setupShareBtn = () => {
-    document.getElementById('btn-share')?.addEventListener('click', async () => {
-        const text = buildShareText();
-        if (navigator.share) {
-            try { await navigator.share({ text }); } catch (e) { /* cancelado por el usuario */ }
-            return;
-        }
-        try {
-            await navigator.clipboard.writeText(text);
-            flashIcon(document.getElementById('btn-share'), document.getElementById('icon-share'), 'check', 'share-2');
-        } catch (e) { }
-    });
-};
-
-// ── Acción rápida: copiar monto y abrir Binance P2P ─────────────
-// Binance P2P no soporta prellenar el monto a vender vía URL, así que
-// copiamos el valor (en formato numérico plano, sin coma decimal) para
-// pegarlo directo en el anuncio una vez abierto.
-const setupBinanceAction = () => {
-    document.getElementById('btn-binance-p2p')?.addEventListener('click', async () => {
-        if (lastUsdtNeeded > 0) {
-            try { await navigator.clipboard.writeText(lastUsdtNeeded.toFixed(2)); } catch (e) { }
-        }
-        window.open('https://p2p.binance.com/trade/sell/USDT?fiat=VES', '_blank', 'noopener');
-    });
-};
-
-// ── Toast de confirmación (pastilla flotante, estilo Arco) ──────
-let toastTimer = null;
-const showToast = (msg, isError = false) => {
-    const el = document.getElementById('toast');
-    const text = document.getElementById('toast-text');
-    if (!el || !text) return;
-    text.textContent = msg;
-    el.classList.toggle('error', isError);
-    el.classList.remove('hidden');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
-};
-
-const copyToClipboard = (text, msg) => {
-    navigator.clipboard.writeText(text).then(() => showToast(msg)).catch(() => { });
-};
-
-// ── Copiar al tocar una tarjeta de tasa (BCV/Binance/Euro/Personalizada) ──
-const setupRateCardCopy = () => {
-    document.querySelectorAll('.rate-card[data-rate]').forEach(card => {
-        card.addEventListener('click', () => {
-            const key = card.dataset.rate;
-            if (key === 'custom' && !customRate.enabled) return;
-            const rate = key === 'custom' ? customRate.value : data[key];
-            if (!rate || rate <= 0) return;
-
-            const rawValue = convMode === 'bs' ? (data.amount / rate) : (rate * data.amount);
-            card.classList.add('copied');
-            setTimeout(() => card.classList.remove('copied'), 600);
-            copyToClipboard(formatBs(rawValue), 'Tasa copiada');
-        });
-    });
-};
-
-// ── Calculadora integrada (overlay) ────────────────────────────
-// Suma/resta/multiplica/divide varios montos antes de usarlos como Cantidad,
-// sin depender de una app de calculadora externa.
-let calcEvalExpr = '';     // expresión real, para evaluar: "10+20*2"
-let calcDisplayExpr = '';  // expresión mostrada, con símbolos bonitos: "10+20×2"
-let calcJustEvaluated = false;
-
-const CALC_OP_DISPLAY = { '+': '+', '-': '−', '*': '×', '/': '÷' };
-const calcIsOperator = (c) => c === '+' || c === '-' || c === '*' || c === '/';
-const calcLastChar = () => calcEvalExpr.slice(-1);
-
-const calcTokenize = (expr) => expr.match(/\d+\.?\d*%?|\.\d+%?|[+\-*/]/g) || [];
-
-// Evalúa tokens respetando precedencia (* / antes que + -); % = valor/100
-const calcEvalTokens = (tokens) => {
-    if (!tokens.length) return 0;
-    const vals = tokens.map(t => calcIsOperator(t) ? t : (t.endsWith('%') ? parseFloat(t) / 100 : parseFloat(t)));
-    const stage = [vals[0]];
-    for (let i = 1; i < vals.length; i += 2) {
-        const op = vals[i];
-        const rhs = vals[i + 1];
-        if (rhs === undefined) break;
-        if (op === '*') stage[stage.length - 1] *= rhs;
-        else if (op === '/') stage[stage.length - 1] = rhs !== 0 ? stage[stage.length - 1] / rhs : 0;
-        else stage.push(op, rhs);
-    }
-    let result = stage[0] || 0;
-    for (let i = 1; i < stage.length; i += 2) {
-        const op = stage[i];
-        const rhs = stage[i + 1];
-        if (rhs === undefined) break;
-        if (op === '+') result += rhs;
-        else if (op === '-') result -= rhs;
-    }
-    return result;
-};
-
-const calcPreview = () => {
-    if (!calcEvalExpr || calcIsOperator(calcLastChar())) return null;
-    try {
-        const result = calcEvalTokens(calcTokenize(calcEvalExpr));
-        return Number.isFinite(result) ? result : null;
-    } catch (e) { return null; }
-};
-
-const updateCalcDisplay = () => {
-    const exprEl = document.getElementById('calc-expression');
-    const resultEl = document.getElementById('calc-result');
-    if (exprEl) exprEl.textContent = calcDisplayExpr || '0';
-    if (resultEl) {
-        const preview = calcPreview();
-        const hasOp = /[+\-*/]/.test(calcEvalExpr);
-        resultEl.textContent = (preview !== null && hasOp) ? `= ${formatUsdt(preview)}` : ' ';
-    }
-    renderCalcItems();
-};
-
-// ── Modo "canasta": lista de ítems cuando la expresión es una suma pura ──
-const getCalcItems = () => {
-    if (!calcEvalExpr || calcIsOperator(calcLastChar())) return null;
-    const isPureSum = /^[\d.]+%?(\+[\d.]+%?)*$/.test(calcEvalExpr);
-    if (!isPureSum) return null;
-    const evalParts = calcEvalExpr.split('+');
-    if (evalParts.length < 2) return null;
-    const dispParts = calcDisplayExpr.split('+');
-    return evalParts.map((ev, i) => ({ evalText: ev, dispText: dispParts[i] ?? ev }));
-};
-
-const renderCalcItems = () => {
-    const wrap = document.getElementById('calc-items');
-    if (!wrap) return;
-    const items = getCalcItems();
-    if (!items) {
-        wrap.classList.add('hidden');
-        wrap.innerHTML = '';
-        return;
-    }
-    wrap.classList.remove('hidden');
-    wrap.innerHTML = '';
-    items.forEach((item, idx) => {
-        const chip = document.createElement('span');
-        chip.className = 'calc-item';
-        chip.textContent = item.dispText;
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'calc-item-remove';
-        removeBtn.setAttribute('aria-label', 'Quitar');
-        removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', () => removeCalcItem(idx));
-        chip.appendChild(removeBtn);
-        wrap.appendChild(chip);
-    });
-};
-
-const removeCalcItem = (idx) => {
-    const items = getCalcItems();
-    if (!items) return;
-    items.splice(idx, 1);
-    if (!items.length) { calcClear(); return; }
-    calcEvalExpr = items.map(i => i.evalText).join('+');
-    calcDisplayExpr = items.map(i => i.dispText).join('+');
-    calcJustEvaluated = false;
-    updateCalcDisplay();
-};
-
-const calcAppendDigit = (d) => {
-    if (calcJustEvaluated) { calcEvalExpr = ''; calcDisplayExpr = ''; calcJustEvaluated = false; }
-    if (calcLastChar() === '%') return; // "%" cierra el número; hace falta un operador para seguir
-    if (d === '.') {
-        const lastNum = calcEvalExpr.match(/(\d*\.?\d*)$/)?.[0] || '';
-        if (lastNum.includes('.')) return;
-        if (calcEvalExpr === '' || calcIsOperator(calcLastChar())) {
-            calcEvalExpr += '0';
-            calcDisplayExpr += '0';
-        }
-    }
-    calcEvalExpr += d;
-    calcDisplayExpr += d;
-    updateCalcDisplay();
-};
-
-const calcAppendOperator = (op) => {
-    calcJustEvaluated = false;
-    if (!calcEvalExpr) return; // no empezar la expresión con un operador
-    if (calcIsOperator(calcLastChar())) {
-        calcEvalExpr = calcEvalExpr.slice(0, -1) + op;
-        calcDisplayExpr = calcDisplayExpr.slice(0, -1) + CALC_OP_DISPLAY[op];
-    } else {
-        calcEvalExpr += op;
-        calcDisplayExpr += CALC_OP_DISPLAY[op];
-    }
-    updateCalcDisplay();
-};
-
-const calcAppendPercent = () => {
-    const last = calcLastChar();
-    if (!last || calcIsOperator(last) || last === '%') return;
-    calcEvalExpr += '%';
-    calcDisplayExpr += '%';
-    updateCalcDisplay();
-};
-
-const calcBackspace = () => {
-    calcEvalExpr = calcEvalExpr.slice(0, -1);
-    calcDisplayExpr = calcDisplayExpr.slice(0, -1);
-    calcJustEvaluated = false;
-    updateCalcDisplay();
-};
-
-const calcClear = () => {
-    calcEvalExpr = '';
-    calcDisplayExpr = '';
-    calcJustEvaluated = false;
-    updateCalcDisplay();
-};
-
-const calcEquals = () => {
-    const preview = calcPreview();
-    if (preview === null) return;
-    const resultStr = String(Math.round(preview * 1e6) / 1e6);
-    calcEvalExpr = resultStr;
-    calcDisplayExpr = resultStr;
-    calcJustEvaluated = true;
-    updateCalcDisplay();
-};
-
-// ── Historial de cálculos recientes ─────────────────────────────
-const CALC_HISTORY_KEY = 'monitor-dolar-calc-history';
-const CALC_HISTORY_MAX = 8;
-
-const loadCalcHistory = () => {
-    try {
-        const raw = localStorage.getItem(CALC_HISTORY_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch (e) { return []; }
-};
-
-const saveCalcHistoryEntry = (displayExpr, value) => {
-    try {
-        const list = loadCalcHistory();
-        list.unshift({ expr: displayExpr, value });
-        localStorage.setItem(CALC_HISTORY_KEY, JSON.stringify(list.slice(0, CALC_HISTORY_MAX)));
-    } catch (e) { }
-};
-
-const renderCalcHistory = () => {
-    const wrap = document.getElementById('calc-history');
-    if (!wrap) return;
-    const list = loadCalcHistory();
-    if (!list.length) {
-        wrap.classList.add('hidden');
-        wrap.innerHTML = '';
-        return;
-    }
-    wrap.classList.remove('hidden');
-    wrap.innerHTML = '';
-    list.forEach(entry => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'calc-history-chip';
-        chip.textContent = `${entry.expr} = ${formatUsdt(entry.value)}`;
-        chip.addEventListener('click', () => {
-            const resultStr = String(entry.value);
-            calcEvalExpr = resultStr;
-            calcDisplayExpr = resultStr;
-            calcJustEvaluated = true;
-            updateCalcDisplay();
-        });
-        wrap.appendChild(chip);
-    });
-};
-
-const openCalcOverlay = () => {
-    calcClear();
-    renderCalcHistory();
-    const overlay = document.getElementById('calc-overlay');
-    overlay?.classList.remove('hidden');
-    overlay?.setAttribute('aria-hidden', 'false');
-};
-
-const closeCalcOverlay = () => {
-    const overlay = document.getElementById('calc-overlay');
-    overlay?.classList.add('hidden');
-    overlay?.setAttribute('aria-hidden', 'true');
-};
-
-const setupCalculator = () => {
-    document.getElementById('btn-open-calc')?.addEventListener('click', openCalcOverlay);
-    document.getElementById('calc-close')?.addEventListener('click', closeCalcOverlay);
-    document.getElementById('calc-overlay')?.addEventListener('click', (e) => {
-        if (e.target.id === 'calc-overlay') closeCalcOverlay();
-    });
-
-    document.querySelectorAll('.calc-key').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const key = btn.dataset.key;
-            if (key === 'C') calcClear();
-            else if (key === 'back') calcBackspace();
-            else if (key === '=') calcEquals();
-            else if (key === '%') calcAppendPercent();
-            else if (calcIsOperator(key)) calcAppendOperator(key);
-            else calcAppendDigit(key);
-        });
-    });
-
-    // Usar el resultado de la calculadora como Cantidad
-    document.getElementById('btn-calc-use')?.addEventListener('click', () => {
-        const preview = calcPreview();
-        if (preview === null) { closeCalcOverlay(); return; }
-        const finalVal = Math.round(preview * 1e6) / 1e6;
-        if (/[+\-*/]/.test(calcEvalExpr)) saveCalcHistoryEntry(calcDisplayExpr, finalVal);
-        data.amount = finalVal;
-        const input = document.getElementById('input-amount');
-        if (input) input.value = finalVal;
-        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
-        updateUI();
-        closeCalcOverlay();
-    });
-
-    // Soporte de teclado físico mientras la calculadora está abierta
-    document.addEventListener('keydown', (e) => {
-        const overlay = document.getElementById('calc-overlay');
-        if (!overlay || overlay.classList.contains('hidden')) return;
-        if (e.key === 'Escape') { closeCalcOverlay(); return; }
-        if (/^[0-9.]$/.test(e.key)) { calcAppendDigit(e.key); return; }
-        if (calcIsOperator(e.key)) { calcAppendOperator(e.key); return; }
-        if (e.key === '%') { calcAppendPercent(); return; }
-        if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); calcEquals(); return; }
-        if (e.key === 'Backspace') { calcBackspace(); return; }
-    });
-};
-
-// ── Error ─────────────────────────────────────────────────────
-const showError = (msg) => {
-    const wrapper = document.getElementById('error-msg');
-    const text = document.getElementById('error-text');
-    if (!wrapper || !text) return;
-    text.textContent = msg || '';
-    wrapper.classList.toggle('hidden', !msg);
-};
-
-// ── Alerta de brecha configurable ───────────────────────────────
-const GAP_THRESHOLD_KEY = 'monitor-dolar-gap-threshold';
-const GAP_ALERT_SENT_KEY = 'monitor-dolar-gap-alert-sent';
-
-const getGapThreshold = () => {
-    const raw = localStorage.getItem(GAP_THRESHOLD_KEY);
-    const n = raw ? parseFloat(raw) : NaN;
-    return Number.isFinite(n) && n > 0 ? n : null;
-};
-
-const updateGapAlertUI = (threshold) => {
-    const btn = document.getElementById('btn-gap-alert');
-    if (!btn) return;
-    btn.classList.toggle('gap-alert-active', !!threshold);
-    btn.title = threshold
-        ? `Te avisamos si la brecha supera ${threshold}% (toca para cambiar)`
-        : 'Configurar alerta de brecha';
-};
-
-// Resalta la tarjeta de Brecha y notifica (1 vez por umbral/día) si se supera
-const checkGapAlert = (gapPct) => {
-    const threshold = getGapThreshold();
-    const card = document.getElementById('gap-card');
-    if (!threshold || !Number.isFinite(gapPct)) {
-        card?.classList.remove('gap-card-alert');
-        return;
-    }
-    const exceeded = gapPct >= threshold;
-    card?.classList.toggle('gap-card-alert', exceeded);
-    if (!exceeded) return;
-
-    const sentKey = `${toDateKey(new Date())}:${threshold}`;
-    if (localStorage.getItem(GAP_ALERT_SENT_KEY) === sentKey) return;
-    localStorage.setItem(GAP_ALERT_SENT_KEY, sentKey);
-    const notifsEnabled = localStorage.getItem('notifications-enabled') === 'true';
-    if (notifsEnabled && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification('Brecha cambiaria alta', {
-            body: `La brecha es de ${gapPct.toFixed(1)}% (tu límite: ${threshold}%)`,
-            icon: '/icons/icon-192.png',
-        });
-    }
-};
-
-// ── Panel de Configuración ──────────────────────────────────────
-const openSettingsModal = () => {
-    const overlay = document.getElementById('settings-overlay');
-    overlay?.classList.remove('hidden');
-    overlay?.setAttribute('aria-hidden', 'false');
-};
-
-const closeSettingsModal = () => {
-    const overlay = document.getElementById('settings-overlay');
-    overlay?.classList.add('hidden');
-    overlay?.setAttribute('aria-hidden', 'true');
-};
-
-const setupSettingsModal = () => {
-    document.getElementById('btn-settings')?.addEventListener('click', openSettingsModal);
-    document.getElementById('btn-gap-alert')?.addEventListener('click', openSettingsModal);
-    document.getElementById('btn-custom-rate-edit')?.addEventListener('click', (e) => {
-        e.stopPropagation(); // evita que también copie el valor de la tarjeta
-        openSettingsModal();
-    });
-    document.getElementById('settings-close')?.addEventListener('click', closeSettingsModal);
-    document.getElementById('settings-overlay')?.addEventListener('click', (e) => {
-        if (e.target.id === 'settings-overlay') closeSettingsModal();
-    });
-
-    // Notificaciones del navegador
-    const notifToggle = document.getElementById('toggle-notifications');
-    const syncNotifToggle = () => {
-        const enabled = localStorage.getItem('notifications-enabled') === 'true';
-        notifToggle?.classList.toggle('active', enabled);
-        notifToggle?.setAttribute('aria-checked', String(enabled));
-    };
-    syncNotifToggle();
-    notifToggle?.addEventListener('click', async () => {
-        const next = localStorage.getItem('notifications-enabled') !== 'true';
-        if (next && 'Notification' in window && Notification.permission === 'default') {
-            await Notification.requestPermission();
-        }
-        localStorage.setItem('notifications-enabled', String(next));
-        syncNotifToggle();
-    });
-
-    // Alerta de brecha
-    const gapToggle = document.getElementById('toggle-gap-alert');
-    const gapFields = document.getElementById('gap-alert-fields');
-    const gapInput = document.getElementById('input-gap-threshold');
-    const syncGapUI = () => {
-        const threshold = getGapThreshold();
-        gapToggle?.classList.toggle('active', !!threshold);
-        gapToggle?.setAttribute('aria-checked', String(!!threshold));
-        gapFields?.classList.toggle('hidden', !threshold);
-        if (gapInput && document.activeElement !== gapInput) gapInput.value = threshold ?? '';
-        updateGapAlertUI(threshold);
-    };
-    syncGapUI();
-    gapToggle?.addEventListener('click', () => {
-        if (getGapThreshold()) {
-            localStorage.removeItem(GAP_THRESHOLD_KEY);
-            localStorage.removeItem(GAP_ALERT_SENT_KEY);
-            document.getElementById('gap-card')?.classList.remove('gap-card-alert');
-        } else {
-            localStorage.setItem(GAP_THRESHOLD_KEY, String(parseFloat(gapInput?.value) || 40));
-        }
-        syncGapUI();
-    });
-    gapInput?.addEventListener('input', () => {
-        const n = parseFloat(gapInput.value);
-        if (Number.isFinite(n) && n > 0) {
-            localStorage.setItem(GAP_THRESHOLD_KEY, String(n));
-            syncGapUI();
-        }
-    });
-
-    // Tasa personalizada
-    const customToggle = document.getElementById('toggle-custom-rate');
-    const customFields = document.getElementById('custom-rate-fields');
-    const nameInput = document.getElementById('input-custom-rate-name');
-    const valueInput = document.getElementById('input-custom-rate-value');
-    const syncCustomUI = () => {
-        customToggle?.classList.toggle('active', customRate.enabled);
-        customToggle?.setAttribute('aria-checked', String(customRate.enabled));
-        customFields?.classList.toggle('hidden', !customRate.enabled);
-        if (nameInput && document.activeElement !== nameInput) nameInput.value = customRate.name;
-        if (valueInput && document.activeElement !== valueInput) valueInput.value = customRate.value || '';
-    };
-    syncCustomUI();
-    customToggle?.addEventListener('click', () => {
-        customRate.enabled = !customRate.enabled;
-        saveCustomRate();
-        syncCustomUI();
-        updateUI();
-    });
-    nameInput?.addEventListener('input', () => {
-        customRate.name = nameInput.value.trim() || 'Personalizada';
-        saveCustomRate();
-        updateUI();
-    });
-    valueInput?.addEventListener('input', () => {
-        const v = parseFloat(valueInput.value);
-        customRate.value = Number.isFinite(v) ? v : 0;
-        saveCustomRate();
-        updateUI();
-    });
-};
-
-// ── Capitalizar primera letra ──────────────────────────────────────
-const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-
-// ── Helpers de fecha ──────────────────────────────────────────────
 const toDateKey = (d) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -867,61 +98,939 @@ const toDateKey = (d) => {
     return `${y}-${m}-${day}`;
 };
 
-// ── Mostrar fecha de la tasa en el badge ──────────────────────────
-const updateRateDateBadge = () => {
-    const badge = document.getElementById('rate-date-badge');
-    if (!badge) return;
+const dateFromKey = (key) => new Date(`${key}T12:00:00`);
 
-    if (rateDate) {
-        const today = new Date();
-        const todayKey = toDateKey(today);
-        const rateDateKey = toDateKey(rateDate);
-        if (rateDateKey === todayKey) {
-            badge.textContent = 'Hoy';
-            badge.classList.remove('is-historical');
+const formatDayMonthYear = (d) =>
+    `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+
+const formatLongDate = (d) => `${cap(d.toLocaleDateString('es-VE', { weekday: 'long' }))}, ${formatDayMonthYear(d)}`;
+
+const formatTime = (d) => d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+const formatRelative = (d) => (toDateKey(d) === toDateKey(new Date()) ? `Hoy, ${formatTime(d)}` : formatLongDate(d));
+
+// Acepta "1.234,56", "1234,56", "1234.56" y "60.41"
+const parseLocaleNumber = (input) => {
+    if (input === null || input === undefined) return NaN;
+    let s = String(input).trim().replace(/[^\d.,-]/g, '');
+    if (!s) return NaN;
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > -1 && lastDot > -1) {
+        s = lastComma > lastDot ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    } else if (lastComma > -1) {
+        s = s.split(',').length > 2 ? s.replace(/,/g, '') : s.replace(',', '.');
+    } else if (lastDot > -1) {
+        const isThousands = s.split('.').length > 2 || /^-?[1-9]\d{0,2}\.\d{3}$/.test(s);
+        if (isThousands) s = s.replace(/\./g, '');
+    }
+    return parseFloat(s);
+};
+
+// ── DOM ───────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+const refreshIcons = () => { if (window.lucide) window.lucide.createIcons(); };
+
+const popElement = (id) => {
+    const el = $(id);
+    if (!el) return;
+    el.classList.remove('value-updated');
+    void el.offsetWidth;
+    el.classList.add('value-updated');
+};
+
+// ── Toast + portapapeles ──────────────────────────────────────
+let toastTimer = null;
+const showToast = (msg, isError = false) => {
+    const el = $('toast');
+    if (!el) return;
+    setText('toast-text', msg);
+    el.classList.toggle('error', isError);
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
+};
+
+const copyText = async (text, msg) => {
+    try {
+        await navigator.clipboard.writeText(text);
+        if (msg) showToast(msg);
+        return true;
+    } catch (e) {
+        showToast('No se pudo copiar', true);
+        return false;
+    }
+};
+
+const readClipboardNumber = async () => {
+    try {
+        const n = parseLocaleNumber(await navigator.clipboard.readText());
+        if (!Number.isFinite(n)) { showToast('El portapapeles no tiene un número', true); return null; }
+        return n;
+    } catch (e) {
+        showToast('No se pudo leer el portapapeles', true);
+        return null;
+    }
+};
+
+// ── Cálculos ──────────────────────────────────────────────────
+const isBsMode = () => inputCurrency === 'bs';
+const officialRate = () => (inputCurrency === 'eur' ? data.euro : data.bcv);
+const getRate = (key) => (key === 'custom' ? customRate.value : data[key]);
+const rateTitle = (key) => (key === 'custom' ? (customRate.name || 'Personalizada') : RATE_DEFS[key].title);
+const chipTitle = (key) => (key === 'custom' ? (customRate.name || 'Mía').slice(0, 12) : RATE_DEFS[key].chip);
+
+const cardTotal = (key) => {
+    const rate = getRate(key);
+    if (!rate) return 0;
+    return isBsMode() ? data.amount / rate : data.amount * rate;
+};
+
+const cardSuffix = (key) => (isBsMode() ? RATE_DEFS[key].sym : 'Bs');
+const formatCardTotal = (key) => (isBsMode() ? formatUsdt(cardTotal(key)) : formatBs(cardTotal(key)));
+
+const amountLabel = () => `${formatBs(data.amount)} ${CURRENCY[inputCurrency].sym}`;
+
+const gapPercent = (bcv = data.bcv, binance = data.binance) => (bcv > 0 ? ((binance - bcv) / bcv) * 100 : 0);
+
+const pctChange = (prev, curr) => (prev > 0 && curr > 0 ? ((curr - prev) / prev) * 100 : null);
+
+const prevFor = (key) => (prevRates && prevRates[key]) || (sessionPrev && sessionPrev[key]) || null;
+
+// ── Persistencia de tasas ─────────────────────────────────────
+const saveToStorage = () => {
+    store.setJSON(KEYS.data, {
+        bcv: data.bcv,
+        binance: data.binance,
+        euro: data.euro,
+        rateDate: rateDate ? toDateKey(rateDate) : null,
+        savedAt: (lastFetchAt || new Date()).toISOString(),
+    });
+};
+
+const loadFromStorage = () => {
+    const stored = store.getJSON(KEYS.data, null);
+    if (!stored || !stored.bcv || !stored.binance || !stored.euro) return false;
+    data = { ...data, bcv: stored.bcv, binance: stored.binance, euro: stored.euro };
+    if (stored.rateDate) rateDate = dateFromKey(stored.rateDate);
+    if (stored.savedAt) lastFetchAt = new Date(stored.savedAt);
+    hasFetchedOnce = true;
+    return true;
+};
+
+// ── Historial diario de tasas ─────────────────────────────────
+const saveHistoryEntry = (dateKey, entry) => {
+    const history = store.getJSON(KEYS.history, {}) || {};
+    history[dateKey] = { ...entry, savedAt: new Date().toISOString() };
+    // Solo los últimos 14 días para no llenar localStorage
+    const trimmed = {};
+    Object.keys(history).sort().slice(-14).forEach((k) => { trimmed[k] = history[k]; });
+    store.setJSON(KEYS.history, trimmed);
+};
+
+const getAllHistoryEntries = () => {
+    const history = store.getJSON(KEYS.history, {}) || {};
+    return Object.entries(history)
+        .map(([date, v]) => ({ date, bcv: v.bcv, binance: v.binance, euro: v.euro }))
+        .filter((e) => e.bcv && e.binance && e.euro)
+        .sort((a, b) => b.date.localeCompare(a.date));
+};
+
+const refreshPrevRates = () => {
+    const currentKey = toDateKey(rateDate || new Date());
+    prevRates = getAllHistoryEntries().find((e) => e.date < currentKey) || null;
+};
+
+// Completa el historial local con el guardado en Cloudflare KV, para que
+// "Antes" y el Historial tengan datos desde el primer día de uso.
+const backfillHistory = async () => {
+    const today = toDateKey(new Date());
+    if (store.get(KEYS.backfill) === today) return;
+    try {
+        const res = await fetch('/api/history', { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) return;
+        const { available = [] } = await res.json();
+        const local = new Set(getAllHistoryEntries().map((e) => e.date));
+        const missing = available.filter((d) => !local.has(d)).slice(0, 14);
+        await Promise.all(missing.map(async (d) => {
+            try {
+                const r = await fetch(`/api/history?date=${encodeURIComponent(d)}`, { signal: AbortSignal.timeout(8000) });
+                if (!r.ok) return;
+                const j = await r.json();
+                if (j.bcv && j.binance && j.euro) saveHistoryEntry(d, { bcv: j.bcv, binance: j.binance, euro: j.euro });
+            } catch (e) { }
+        }));
+        store.set(KEYS.backfill, today);
+        if (missing.length) {
+            refreshPrevRates();
+            updateUI();
+        }
+    } catch (e) {
+        console.warn('[backfillHistory]', e.message);
+    }
+};
+
+// ── Tasa personalizada ────────────────────────────────────────
+const loadCustomRate = () => {
+    const saved = store.getJSON(KEYS.customRate, null);
+    if (saved) customRate = { ...customRate, ...saved };
+};
+
+const saveCustomRate = () => store.setJSON(KEYS.customRate, customRate);
+
+// ── Tema, color y vista ───────────────────────────────────────
+const applyTheme = (theme) => {
+    document.documentElement.setAttribute('data-theme', theme);
+    store.set(KEYS.theme, theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === 'dark' ? '#0a0b0d' : '#f2f3f5';
+};
+
+const applyAccent = (accent) => {
+    document.documentElement.setAttribute('data-accent', accent);
+    store.set(KEYS.accent, accent);
+};
+
+const applyView = (mode) => {
+    viewMode = mode === 'list' ? 'list' : 'grid';
+    store.set(KEYS.view, viewMode);
+    $('rates-grid')?.classList.toggle('is-list', viewMode === 'list');
+    document.querySelectorAll('#view-toggle [data-view], #view-seg [data-view]').forEach((b) => {
+        b.classList.toggle('is-selected', b.dataset.view === viewMode);
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  CONVERSOR
+// ══════════════════════════════════════════════════════════════
+const formatAmountDisplay = (n) => (n ? formatBs(n) : '');
+const formatAmountEdit = (n) => (n ? String(Math.round(n * 100) / 100).replace('.', ',') : '');
+
+const clearQuickActive = () => document.querySelectorAll('.quick-btn').forEach((b) => b.classList.remove('active'));
+
+const setAmount = (n, { fromTyping = false } = {}) => {
+    data.amount = Number.isFinite(n) && n >= 0 ? n : 0;
+    const input = $('input-amount');
+    if (!fromTyping && input) {
+        input.value = document.activeElement === input ? formatAmountEdit(data.amount) : formatAmountDisplay(data.amount);
+    }
+    updateUI();
+};
+
+const setCurrency = (cur) => {
+    inputCurrency = CURRENCY[cur] ? cur : 'usd';
+    if (inputCurrency !== 'bs') lastForeign = inputCurrency;
+    store.set(KEYS.currency, inputCurrency);
+    updateUI();
+};
+
+const toggleCurrencyMenu = (open) => {
+    const menu = $('currency-menu');
+    const btn = $('btn-currency');
+    if (!menu || !btn) return;
+    const willOpen = open === undefined ? menu.classList.contains('hidden') : open;
+    menu.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+};
+
+const updateConverterChrome = () => {
+    setText('currency-symbol', CURRENCY[inputCurrency].sym);
+    if (isBsMode()) {
+        setText('dir-from', 'Bs');
+        setText('dir-to', CURRENCY[lastForeign].sym);
+    } else {
+        setText('dir-from', CURRENCY[inputCurrency].sym);
+        setText('dir-to', 'Bs');
+    }
+    document.querySelectorAll('#currency-menu [data-currency]').forEach((b) => {
+        b.classList.toggle('is-selected', b.dataset.currency === inputCurrency);
+    });
+
+    const hint = $('conv-hint');
+    if (hint) {
+        const value = isBsMode()
+            ? `${formatUsdt(data.bcv > 0 ? data.amount / data.bcv : 0)} $`
+            : `${formatBs(data.amount * officialRate())} Bs`;
+        hint.innerHTML = '';
+        hint.append('= ');
+        const strong = document.createElement('strong');
+        strong.textContent = value;
+        hint.append(strong, ' a tasa BCV');
+    }
+};
+
+const setupConverter = () => {
+    const input = $('input-amount');
+
+    input?.addEventListener('focus', () => {
+        input.value = formatAmountEdit(data.amount);
+        requestAnimationFrame(() => input.select());
+    });
+
+    input?.addEventListener('blur', () => {
+        input.value = formatAmountDisplay(data.amount);
+    });
+
+    input?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+    });
+
+    input?.addEventListener('input', () => {
+        // Solo dígitos y una coma decimal (el punto se convierte en coma), máx. 2 decimales
+        let v = input.value.replace(/[^\d.,]/g, '').replace(/\./g, ',');
+        const comma = v.indexOf(',');
+        if (comma !== -1) v = v.slice(0, comma + 1) + v.slice(comma + 1).replace(/,/g, '').slice(0, 2);
+        if (v !== input.value) input.value = v;
+        clearQuickActive();
+        setAmount(parseFloat(v.replace(',', '.')) || 0, { fromTyping: true });
+    });
+
+    input?.addEventListener('paste', (e) => {
+        const n = parseLocaleNumber(e.clipboardData?.getData('text'));
+        if (!Number.isFinite(n)) return;
+        e.preventDefault();
+        clearQuickActive();
+        setAmount(n);
+    });
+
+    document.querySelectorAll('.quick-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            clearQuickActive();
+            btn.classList.add('active');
+            setAmount(Number(btn.dataset.amount));
+        });
+    });
+
+    $('btn-currency')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleCurrencyMenu();
+    });
+
+    document.querySelectorAll('#currency-menu [data-currency]').forEach((b) => {
+        b.addEventListener('click', () => {
+            setCurrency(b.dataset.currency);
+            toggleCurrencyMenu(false);
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.currency-wrap')) toggleCurrencyMenu(false);
+    });
+
+    $('btn-direction')?.addEventListener('click', () => setCurrency(isBsMode() ? lastForeign : 'bs'));
+
+    $('act-copy')?.addEventListener('click', () => {
+        if (isBsMode()) {
+            copyText(formatUsdt(data.bcv > 0 ? data.amount / data.bcv : 0), 'Monto en $ a tasa BCV copiado');
         } else {
-            // Fin de semana: la tasa es del viernes
-            const dayName = rateDate.toLocaleDateString('es-VE', { weekday: 'short' });
-            const dayMonth = rateDate.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' });
-            badge.textContent = `${cap(dayName)} ${dayMonth}`;
-            badge.classList.add('is-historical');
+            copyText(formatBs(data.amount * officialRate()), 'Monto a tasa BCV copiado');
+        }
+    });
+
+    $('act-paste')?.addEventListener('click', async () => {
+        const n = await readClipboardNumber();
+        if (n === null) return;
+        clearQuickActive();
+        setAmount(Math.abs(n));
+        showToast('Monto pegado');
+    });
+
+    $('act-clear')?.addEventListener('click', () => {
+        clearQuickActive();
+        setAmount(0);
+        const input2 = $('input-amount');
+        if (input2) { input2.value = ''; input2.focus(); }
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  TARJETAS DE TASAS
+// ══════════════════════════════════════════════════════════════
+const buildRateCards = () => {
+    const grid = $('rates-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    CARD_ORDER.filter((k) => k !== 'custom' || customRate.enabled).forEach((key) => {
+        const def = key === 'gap' ? { icon: 'scale', color: 'red' } : RATE_DEFS[key];
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'rate-card';
+        card.dataset.rate = key;
+        card.dataset.color = def.color;
+        if (key === 'gap') card.id = 'gap-card';
+        card.innerHTML = `
+            <span class="rc-head">
+                <span class="rc-icon"><i data-lucide="${def.icon}" class="ic-sm"></i></span>
+                <span class="rc-title" id="title-${key}"></span>
+            </span>
+            <span class="rc-value">
+                <span class="rc-num" id="total-${key}">--</span>
+                <span class="rc-suffix" id="suffix-${key}"></span>
+            </span>
+            <span class="rc-meta">
+                <span class="rc-line" id="line1-${key}"></span>
+                <span class="rc-line" id="line2-${key}"></span>
+                <span class="rc-line" id="line3-${key}"></span>
+            </span>
+            <span class="rc-change" id="change-${key}"></span>`;
+        card.addEventListener('click', () => onCardClick(key, card));
+        grid.appendChild(card);
+    });
+
+    refreshIcons();
+};
+
+const onCardClick = (key, card) => {
+    if (key === 'gap') {
+        copyText(`${NF2.format(gapPercent())}%`, 'Brecha copiada');
+    } else {
+        if (!getRate(key)) return;
+        copyText(formatCardTotal(key), `${rateTitle(key)} copiado`);
+    }
+    card.classList.add('copied');
+    setTimeout(() => card.classList.remove('copied'), 700);
+};
+
+const renderChange = (id, value, unit) => {
+    const el = $(id);
+    if (!el) return;
+    if (value === null || !Number.isFinite(value) || isLoading) {
+        el.textContent = '';
+        el.className = 'rc-change';
+        return;
+    }
+    const dir = value > 0.005 ? 'up' : value < -0.005 ? 'down' : 'flat';
+    const arrow = dir === 'up' ? '↗' : dir === 'down' ? '↘' : '→';
+    el.textContent = `${arrow} ${NF2.format(Math.abs(value))}${unit}`;
+    el.className = `rc-change ${dir}`;
+};
+
+const cardDateText = (key) => {
+    if (key === 'custom') return 'Tasa definida por ti';
+    if (key === 'binance') return lastFetchAt ? formatRelative(lastFetchAt) : '';
+    const d = rateDate || lastFetchAt;
+    return d ? formatLongDate(d) : '';
+};
+
+const renderRateCard = (key) => {
+    if (key === 'custom' && !customRate.enabled) return;
+    const rate = getRate(key);
+    const sym = RATE_DEFS[key].sym;
+
+    setText(`title-${key}`, rateTitle(key));
+    setText(`total-${key}`, isLoading && key !== 'custom' ? '--' : formatCardTotal(key));
+    setText(`suffix-${key}`, cardSuffix(key));
+    setText(`line1-${key}`, data.amount !== 1 && rate ? `1 ${sym} = ${formatBs(rate)} Bs` : '');
+    setText(`line2-${key}`, cardDateText(key));
+
+    const prev = key === 'custom' ? null : prevFor(key);
+    setText(`line3-${key}`, prev ? `Antes: ${formatBs(prev)}` : '');
+    renderChange(`change-${key}`, prev ? pctChange(prev, rate) : null, '%');
+};
+
+const renderGapCard = (gapAlert) => {
+    const gap = gapPercent();
+    setText('title-gap', 'Brecha');
+    setText('total-gap', isLoading ? '--' : NF2.format(gap));
+    setText('suffix-gap', '%');
+
+    if (isBsMode()) {
+        const diffUsd = data.bcv > 0 && data.binance > 0 ? data.amount / data.bcv - data.amount / data.binance : 0;
+        setText('line1-gap', `${formatUsdt(diffUsd)} $ de diferencia`);
+    } else {
+        setText('line1-gap', `+${formatBs((data.binance - data.bcv) * data.amount)} Bs de diferencia`);
+    }
+    setText('line2-gap', 'Binance vs. BCV');
+
+    const pb = prevFor('bcv');
+    const pp = prevFor('binance');
+    const prevGap = pb && pp ? gapPercent(pb, pp) : null;
+    setText('line3-gap', prevGap !== null ? `Antes: ${NF2.format(prevGap)}%` : '');
+
+    if (gapAlert.exceeded) {
+        const el = $('change-gap');
+        if (el) {
+            el.textContent = `Supera tu límite (${NF2.format(gapAlert.threshold)}%)`;
+            el.className = 'rc-change alert';
         }
     } else {
-        badge.textContent = isLoading ? '...' : 'Hoy';
+        renderChange('change-gap', prevGap !== null ? gap - prevGap : null, ' pts');
+    }
+};
+
+const updateRateDateBadge = () => {
+    const badge = $('rate-date-badge');
+    if (!badge) return;
+    if (rateDate) {
+        const isToday = toDateKey(rateDate) === toDateKey(new Date());
+        badge.textContent = isToday
+            ? 'Hoy'
+            : `${cap(rateDate.toLocaleDateString('es-VE', { weekday: 'short' }))} ${formatDayMonthYear(rateDate).slice(0, 5)}`;
+        badge.classList.toggle('is-historical', !isToday);
+    } else {
+        badge.textContent = isLoading ? '...' : '';
         badge.classList.remove('is-historical');
     }
 };
 
-// ── Estado de carga ───────────────────────────────────────────
-const setLoadState = (state) => {
-    isLoading = state;
-    const iconRefresh = document.getElementById('icon-refresh');
-    const iconMain = document.getElementById('icon-main');
-    const textMain = document.getElementById('text-main');
+// ── Render general ────────────────────────────────────────────
+const updateUI = () => {
+    updateConverterChrome();
 
-    if (state) {
-        iconRefresh?.classList.add('animate-spin');
-        iconMain?.classList.add('animate-spin');
-        iconMain?.setAttribute('data-lucide', 'refresh-cw');
-        if (textMain) textMain.textContent = 'Actualizando...';
-        set('text-update', 'Buscando tasas...');
-    } else {
-        iconRefresh?.classList.remove('animate-spin');
-        iconMain?.classList.remove('animate-spin');
-        iconMain?.setAttribute('data-lucide', 'calculator');
-        if (textMain) textMain.textContent = 'Actualizar Monitor';
-        const now = new Date();
-        set('text-update',
-            `Hoy ${now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true })}`
-        );
-        saveToStorage();
-    }
+    // Diferencia a tasa: USDT a vender para cubrir el monto a tasa oficial
+    const usdt = data.binance > 0
+        ? (isBsMode() ? data.amount / data.binance : (data.amount * officialRate()) / data.binance)
+        : 0;
+    lastUsdtNeeded = usdt;
+    setText('eq-usdt', isLoading ? '--' : `${formatUsdt(usdt)} USDT`);
+    setText('sub-amount', amountLabel());
+
+    const gapAlert = isLoading ? { exceeded: false } : checkGapAlert(gapPercent());
+    ['bcv', 'euro', 'binance', 'custom'].forEach(renderRateCard);
+    renderGapCard(gapAlert);
     updateRateDateBadge();
-    lucide.createIcons();
-    updateUI();
+
+    if (!isLoading) {
+        CARD_ORDER.forEach((k) => popElement(`total-${k}`));
+        popElement('eq-usdt');
+    }
 };
 
-// ── Historial (acordeón con rango de fechas + exportar) ───────────────
+// ══════════════════════════════════════════════════════════════
+//  HOJAS / MODALES
+// ══════════════════════════════════════════════════════════════
+const openStack = [];
+const openHooks = {};
+const closeHooks = {};
+
+const topOverlay = () => openStack[openStack.length - 1] || null;
+
+const openOverlay = (id) => {
+    const el = $(id);
+    if (!el || !el.classList.contains('hidden')) return;
+    toggleCurrencyMenu(false);
+    if (openHooks[id]) openHooks[id]();
+    el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
+    openStack.push(id);
+    document.body.classList.add('no-scroll');
+    document.querySelectorAll(`[data-opens="${id}"]`).forEach((b) => b.classList.add('is-active'));
+};
+
+const closeOverlay = (id) => {
+    const el = $(id);
+    if (!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    el.setAttribute('aria-hidden', 'true');
+    const i = openStack.lastIndexOf(id);
+    if (i > -1) openStack.splice(i, 1);
+    if (!openStack.length) document.body.classList.remove('no-scroll');
+    document.querySelectorAll(`[data-opens="${id}"]`).forEach((b) => b.classList.remove('is-active'));
+    if (closeHooks[id]) closeHooks[id]();
+};
+
+const closeAllOverlays = () => { while (topOverlay()) closeOverlay(topOverlay()); };
+
+const setupOverlays = () => {
+    document.querySelectorAll('[data-opens]').forEach((btn) => {
+        btn.addEventListener('click', () => openOverlay(btn.dataset.opens));
+    });
+
+    document.querySelectorAll('.sheet-overlay, .modal-overlay').forEach((ov) => {
+        ov.addEventListener('click', (e) => { if (e.target === ov) closeOverlay(ov.id); });
+        ov.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => closeOverlay(ov.id)));
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (!$('currency-menu')?.classList.contains('hidden')) { toggleCurrencyMenu(false); return; }
+        if (topOverlay()) closeOverlay(topOverlay());
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  CALCULADORA
+// ══════════════════════════════════════════════════════════════
+// La expresión interna usa "." decimal, "* / + -" y "~" como signo negativo
+// (para no confundirlo con la resta). En pantalla se muestra en formato local.
+let calcExpr = '';
+let calcJustEvaluated = false;
+let calcEchoExpr = ''; // la operación que produjo el resultado, tras pulsar "="
+
+const CALC_DISPLAY_MAP = { '.': ',', '*': '×', '/': '÷', '-': '−', '~': '-' };
+const toCalcDisplay = (s) => s.replace(/[.*/\-~]/g, (ch) => CALC_DISPLAY_MAP[ch]);
+const isCalcOp = (c) => c === '+' || c === '-' || c === '*' || c === '/';
+const calcLast = () => calcExpr.slice(-1);
+const calcSegment = () => calcExpr.match(/[\d.]*$/)[0];
+const calcHasOp = () => /[+\-*/]/.test(calcExpr);
+const calcTokenize = (expr) => expr.match(/~?\d+\.?\d*%?|~?\.\d+%?|[+\-*/]/g) || [];
+
+const numToCalcExpr = (n) => {
+    const r = Math.round(n * 1e6) / 1e6;
+    return r < 0 ? `~${-r}` : String(r);
+};
+
+// Precedencia: × ÷ antes que + −. "a + b%" suma el b% de a; "a × b%" usa b/100.
+const calcEvaluate = (expr) => {
+    const tokens = calcTokenize(expr);
+    if (!tokens.length) return null;
+    const vals = tokens.map((t) => {
+        if (isCalcOp(t)) return t;
+        const neg = t.startsWith('~');
+        const body = neg ? t.slice(1) : t;
+        const pct = body.endsWith('%');
+        let v = parseFloat(pct ? body.slice(0, -1) : body);
+        if (!Number.isFinite(v)) v = 0;
+        if (neg) v = -v;
+        return { v: pct ? v / 100 : v, pct };
+    });
+    for (let i = 0; i < vals.length; i++) {
+        if ((i % 2 === 1) !== (typeof vals[i] === 'string')) return null;
+    }
+    if (typeof vals[vals.length - 1] === 'string') return null;
+
+    const stage = [vals[0]];
+    for (let i = 1; i < vals.length; i += 2) {
+        const op = vals[i];
+        const rhs = vals[i + 1];
+        if (op === '*' || op === '/') {
+            const left = stage[stage.length - 1];
+            const v = op === '*' ? left.v * rhs.v : (rhs.v !== 0 ? left.v / rhs.v : NaN);
+            stage[stage.length - 1] = { v, pct: false };
+        } else {
+            stage.push(op, rhs);
+        }
+    }
+    let result = stage[0].v;
+    for (let i = 1; i < stage.length; i += 2) {
+        const rhs = stage[i + 1];
+        const r = rhs.pct ? result * rhs.v : rhs.v;
+        result = stage[i] === '+' ? result + r : result - r;
+    }
+    return Number.isFinite(result) ? result : null;
+};
+
+const calcPreview = () => calcEvaluate(calcExpr);
+
+// Número que se está escribiendo, con separador de miles: "~1234.5" → "-1.234,5"
+const groupTyped = (s) => {
+    const m = s.match(/^(~?)(\d*)(\.?)(\d*)(%?)$/);
+    if (!m) return toCalcDisplay(s);
+    const [, neg, int, dot, dec, pct] = m;
+    const intPart = int ? NF0.format(Number(int)) : (dot ? '0' : '');
+    return `${neg ? '-' : ''}${intPart}${dot ? ',' : ''}${dec}${pct}`;
+};
+
+const renderCalc = () => {
+    const hasOp = calcHasOp();
+    const preview = calcPreview();
+    setText('calc-expression', hasOp ? toCalcDisplay(calcExpr) : calcEchoExpr);
+    let main;
+    if (!calcExpr) main = '0';
+    else if (hasOp) main = preview !== null ? formatCalc(preview) : toCalcDisplay(calcExpr);
+    else main = groupTyped(calcExpr);
+    setText('calc-main', main);
+    renderCalcItems();
+};
+
+const calcDigit = (d) => {
+    calcEchoExpr = '';
+    if (calcJustEvaluated) { calcExpr = ''; calcJustEvaluated = false; }
+    if (calcLast() === '%') return; // "%" cierra el número; hace falta un operador para seguir
+    const seg = calcSegment();
+    if (d === '.') {
+        if (seg.includes('.')) return;
+        if (seg === '') calcExpr += '0';
+    } else {
+        if (seg.replace('.', '').length >= 15) return;
+        if (seg === '0') calcExpr = calcExpr.slice(0, -1);
+    }
+    calcExpr += d;
+    renderCalc();
+};
+
+const calcOperator = (op) => {
+    calcEchoExpr = '';
+    calcJustEvaluated = false;
+    const last = calcLast();
+    if (!calcExpr) {
+        if (op === '-') calcExpr = '~';
+    } else if (last === '~') {
+        return;
+    } else if (isCalcOp(last)) {
+        // "5 × −3": un "−" tras × o ÷ empieza un número negativo
+        if (op === '-' && (last === '*' || last === '/')) calcExpr += '~';
+        else calcExpr = calcExpr.slice(0, -1) + op;
+    } else if (last === '.') {
+        calcExpr = calcExpr.slice(0, -1) + op;
+    } else {
+        calcExpr += op;
+    }
+    renderCalc();
+};
+
+const calcPercent = () => {
+    calcEchoExpr = '';
+    calcJustEvaluated = false;
+    if (calcLast() === '.') calcExpr = calcExpr.slice(0, -1);
+    if (!/\d/.test(calcLast())) return;
+    calcExpr += '%';
+    renderCalc();
+};
+
+const calcToggleSign = () => {
+    calcEchoExpr = '';
+    calcJustEvaluated = false;
+    const m = calcExpr.match(/(~?)([\d.]*%?)$/);
+    const start = calcExpr.length - m[0].length;
+    calcExpr = calcExpr.slice(0, start) + (m[1] ? '' : '~') + m[2];
+    renderCalc();
+};
+
+const calcBackspace = () => {
+    calcEchoExpr = '';
+    calcJustEvaluated = false;
+    calcExpr = calcExpr.slice(0, -1);
+    renderCalc();
+};
+
+const calcClear = () => {
+    calcEchoExpr = '';
+    calcJustEvaluated = false;
+    calcExpr = '';
+    renderCalc();
+};
+
+const calcEquals = () => {
+    const v = calcPreview();
+    if (v === null) return;
+    if (calcHasOp() || calcExpr.includes('%')) {
+        const shown = toCalcDisplay(calcExpr);
+        calcEchoExpr = `${shown} =`;
+        saveCalcHistoryEntry(shown, v);
+    }
+    calcExpr = numToCalcExpr(v);
+    calcJustEvaluated = true;
+    renderCalc();
+};
+
+// Inserta un número (tasa, valor pegado): si ya hay un número delante, multiplica
+const calcInsertNumber = (n) => {
+    calcEchoExpr = '';
+    let s = numToCalcExpr(n);
+    if (calcJustEvaluated) { calcExpr = ''; calcJustEvaluated = false; }
+    const last = calcLast();
+    if (last === '~') {
+        calcExpr = calcExpr.slice(0, -1);
+        s = s.startsWith('~') ? s.slice(1) : `~${s}`;
+    } else if (last === '.') {
+        calcExpr = `${calcExpr.slice(0, -1)}*`;
+    } else if (calcExpr && !isCalcOp(last)) {
+        calcExpr += '*';
+    }
+    calcExpr += s;
+    renderCalc();
+};
+
+// ── Modo "canasta": cada sumando como chip removible ──
+const getCalcItems = () => (/^[\d.]+(\+[\d.]+)+$/.test(calcExpr) ? calcExpr.split('+') : null);
+
+const renderCalcItems = () => {
+    const wrap = $('calc-items');
+    if (!wrap) return;
+    const items = getCalcItems();
+    wrap.classList.toggle('hidden', !items);
+    wrap.innerHTML = '';
+    if (!items) return;
+    items.forEach((part, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'calc-item';
+        chip.textContent = groupTyped(part);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'calc-item-remove';
+        remove.setAttribute('aria-label', 'Quitar');
+        remove.textContent = '×';
+        remove.addEventListener('click', () => {
+            const parts = getCalcItems();
+            if (!parts) return;
+            parts.splice(idx, 1);
+            calcExpr = parts.join('+');
+            calcEchoExpr = '';
+            calcJustEvaluated = false;
+            renderCalc();
+        });
+        chip.appendChild(remove);
+        wrap.appendChild(chip);
+    });
+};
+
+// ── Tasas listas para insertar ──
+const renderCalcChips = () => {
+    const current = $('calc-chips-current');
+    const previous = $('calc-chips-prev');
+    if (!current || !previous) return;
+
+    const makeChip = (key, value, isPrev) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `rate-chip${isPrev ? ' is-prev' : ''}`;
+        b.dataset.color = RATE_DEFS[key].color;
+        b.innerHTML = '<span class="dot"></span><span class="lbl"></span><span class="val"></span>';
+        b.querySelector('.lbl').textContent = isPrev ? `${chipTitle(key)} ant.` : chipTitle(key);
+        b.querySelector('.val').textContent = formatBs(value);
+        b.addEventListener('click', () => calcInsertNumber(value));
+        return b;
+    };
+
+    current.innerHTML = '';
+    previous.innerHTML = '';
+    ['bcv', 'euro', 'binance', 'custom'].forEach((k) => {
+        if (k === 'custom' && !customRate.enabled) return;
+        const v = getRate(k);
+        if (v > 0) current.appendChild(makeChip(k, v, false));
+    });
+    ['bcv', 'euro', 'binance'].forEach((k) => {
+        const p = prevFor(k);
+        if (p) previous.appendChild(makeChip(k, p, true));
+    });
+};
+
+// ── Historial de operaciones ──
+const CALC_HISTORY_MAX = 20;
+
+const loadCalcHistory = () => {
+    const list = store.getJSON(KEYS.calcHistory, []);
+    return Array.isArray(list) ? list.filter((e) => e && typeof e.value === 'number') : [];
+};
+
+const saveCalcHistoryEntry = (expr, value) => {
+    const list = loadCalcHistory();
+    if (list[0] && list[0].expr === expr && list[0].value === value) return;
+    list.unshift({ expr, value });
+    store.setJSON(KEYS.calcHistory, list.slice(0, CALC_HISTORY_MAX));
+};
+
+const renderCalcHistory = () => {
+    const wrap = $('calc-history-list');
+    if (!wrap) return;
+    const list = loadCalcHistory();
+    wrap.innerHTML = '';
+    if (!list.length) {
+        const empty = document.createElement('p');
+        empty.className = 'calc-history-empty';
+        empty.textContent = 'Aún no hay operaciones. Pulsa "=" para guardarlas aquí.';
+        wrap.appendChild(empty);
+        return;
+    }
+    list.forEach((entry) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'calc-history-row';
+        const expr = document.createElement('span');
+        expr.className = 'expr';
+        expr.textContent = entry.expr;
+        const res = document.createElement('span');
+        res.className = 'res';
+        res.textContent = `= ${formatCalc(entry.value)}`;
+        row.append(expr, res);
+        row.addEventListener('click', () => {
+            calcExpr = numToCalcExpr(entry.value);
+            calcJustEvaluated = true;
+            calcEchoExpr = `${entry.expr} =`;
+            renderCalc();
+        });
+        wrap.appendChild(row);
+    });
+};
+
+const setCalcHistoryVisible = (visible) => {
+    $('calc-history-panel')?.classList.toggle('hidden', !visible);
+    $('calc-chips-block')?.classList.toggle('hidden', visible);
+    $('calc-history-toggle')?.classList.toggle('is-active', visible);
+    if (visible) renderCalcHistory();
+};
+
+const setupCalculator = () => {
+    openHooks['calc-sheet'] = () => {
+        renderCalcChips();
+        setCalcHistoryVisible(false);
+        renderCalc();
+    };
+
+    document.querySelectorAll('.calc-keypad .key').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const k = btn.dataset.key;
+            if (k === 'C') calcClear();
+            else if (k === 'sign') calcToggleSign();
+            else if (k === '%') calcPercent();
+            else if (k === 'back') calcBackspace();
+            else if (k === '=') calcEquals();
+            else if (isCalcOp(k)) calcOperator(k);
+            else calcDigit(k);
+        });
+    });
+
+    $('calc-history-toggle')?.addEventListener('click', () => {
+        setCalcHistoryVisible($('calc-history-panel')?.classList.contains('hidden'));
+    });
+
+    $('calc-history-clear')?.addEventListener('click', () => {
+        store.remove(KEYS.calcHistory);
+        renderCalcHistory();
+    });
+
+    $('calc-paste')?.addEventListener('click', async () => {
+        const n = await readClipboardNumber();
+        if (n !== null) calcInsertNumber(n);
+    });
+
+    $('calc-save-rate')?.addEventListener('click', () => {
+        const v = calcPreview();
+        if (v === null || v <= 0) { showToast('Necesitas un resultado mayor a 0', true); return; }
+        customRate = { ...customRate, enabled: true, value: Math.round(v * 100) / 100 };
+        saveCustomRate();
+        buildRateCards();
+        updateUI();
+        renderCalcChips();
+        showToast(`Guardada como "${customRate.name || 'Mi tasa'}"`);
+    });
+
+    $('btn-calc-use')?.addEventListener('click', () => {
+        const v = calcPreview();
+        if (v === null) { showToast('No hay un resultado para usar', true); return; }
+        if (v < 0) { showToast('El monto no puede ser negativo', true); return; }
+        if (calcHasOp() || calcExpr.includes('%')) saveCalcHistoryEntry(toCalcDisplay(calcExpr), v);
+        clearQuickActive();
+        setAmount(v);
+        calcExpr = '';
+        calcEchoExpr = '';
+        calcJustEvaluated = false;
+        closeOverlay('calc-sheet');
+        showToast('Monto actualizado');
+    });
+
+    // Teclado físico mientras la calculadora es la hoja visible
+    document.addEventListener('keydown', (e) => {
+        if (topOverlay() !== 'calc-sheet' || e.ctrlKey || e.metaKey || e.altKey) return;
+        const k = e.key;
+        if (/^\d$/.test(k)) calcDigit(k);
+        else if (k === '.' || k === ',') calcDigit('.');
+        else if (isCalcOp(k)) calcOperator(k);
+        else if (k === '%') calcPercent();
+        else if (k === 'Enter' || k === '=') calcEquals();
+        else if (k === 'Backspace') calcBackspace();
+        else if (k === 'Delete') calcClear();
+        else return;
+        e.preventDefault();
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  HISTORIAL DE TASAS
+// ══════════════════════════════════════════════════════════════
 const getNDaysAgoKey = (n) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
@@ -931,105 +1040,101 @@ const getNDaysAgoKey = (n) => {
 let historyStart = getNDaysAgoKey(7);
 let historyEnd = toDateKey(new Date());
 
-const getAllHistoryEntries = () => {
-    try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        const history = raw ? JSON.parse(raw) : {};
-        return Object.entries(history)
-            .map(([date, v]) => ({ date, bcv: v.bcv, binance: v.binance, euro: v.euro }))
-            .filter(e => e.bcv && e.binance && e.euro)
-            .sort((a, b) => b.date.localeCompare(a.date));
-    } catch (e) { return []; }
-};
-
 const getFilteredHistoryEntries = () =>
-    getAllHistoryEntries().filter(e => e.date >= historyStart && e.date <= historyEnd);
+    getAllHistoryEntries().filter((e) => e.date >= historyStart && e.date <= historyEnd);
 
 const renderHistoryList = () => {
-    const listEl = document.getElementById('history-list');
-    if (!listEl) return;
+    const list = $('history-list');
+    if (!list) return;
     const entries = getFilteredHistoryEntries();
+    list.innerHTML = '';
 
     if (!entries.length) {
-        listEl.innerHTML = '<p class="history-empty">Sin registros en este rango. El historial se acumula con cada visita a la app.</p>';
+        const empty = document.createElement('p');
+        empty.className = 'history-empty';
+        empty.textContent = 'Sin registros en este rango. El historial se acumula con cada visita a la app.';
+        list.appendChild(empty);
         return;
     }
 
-    listEl.innerHTML = '';
-    entries.forEach(entry => {
+    const makeCell = (label, value, isValue, onClick) => {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = `history-cell${isValue ? ' is-value' : ''}`;
+        const l = document.createElement('span');
+        l.className = 'history-cell-label';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.className = 'history-cell-value';
+        v.textContent = value;
+        cell.append(l, v);
+        cell.addEventListener('click', onClick);
+        return cell;
+    };
+
+    entries.forEach((entry) => {
         const row = document.createElement('div');
         row.className = 'history-row';
+        const d = dateFromKey(entry.date);
+        const dateText = `${cap(d.toLocaleDateString('es-VE', { weekday: 'short' }))} ${formatDayMonthYear(d)}`;
+        row.appendChild(makeCell('Fecha', dateText, false, () => copyText(formatDayMonthYear(d), 'Fecha copiada')));
 
-        const dateBox = document.createElement('div');
-        dateBox.className = 'history-row-date';
-        dateBox.innerHTML = '<span class="history-row-date-label">Fecha</span>' +
-            `<span class="history-row-date-value">${entry.date}</span>`;
-        dateBox.addEventListener('click', () => copyToClipboard(entry.date, 'Fecha copiada'));
-
-        const valuesBox = document.createElement('div');
-        valuesBox.className = 'history-row-values';
+        const values = document.createElement('div');
+        values.className = 'history-values';
         [['bcv', 'USD'], ['euro', 'EUR'], ['binance', 'P2P']].forEach(([k, label]) => {
-            const valBox = document.createElement('div');
-            valBox.className = 'history-row-value';
-            valBox.innerHTML = `<span class="history-row-value-label">${label}</span>` +
-                `<span class="history-row-value-amount">${formatBs(entry[k])}</span>`;
-            valBox.addEventListener('click', (e) => {
-                e.stopPropagation();
-                copyToClipboard(formatBs(entry[k]), 'Tasa copiada');
-            });
-            valuesBox.appendChild(valBox);
+            values.appendChild(makeCell(label, formatBs(entry[k]), true, () => copyText(formatBs(entry[k]), 'Tasa copiada')));
         });
-
-        row.appendChild(dateBox);
-        row.appendChild(valuesBox);
-        listEl.appendChild(row);
+        row.appendChild(values);
+        list.appendChild(row);
     });
 };
 
 const updateHistoryResetVisibility = () => {
-    const resetBtn = document.getElementById('history-reset');
-    if (!resetBtn) return;
     const isDefault = historyStart === getNDaysAgoKey(7) && historyEnd === toDateKey(new Date());
-    resetBtn.classList.toggle('hidden', isDefault);
+    $('history-reset')?.classList.toggle('hidden', isDefault);
+};
+
+const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
 };
 
 const exportHistoryCSV = () => {
     const entries = getFilteredHistoryEntries();
     if (!entries.length) { showToast('No hay datos para exportar', true); return; }
-    const headers = ['Fecha', 'BCV (Bs)', 'Euro (Bs)', 'Binance P2P (Bs)'];
-    const csv = [headers.join(','), ...entries.map(e => `${e.date},${e.bcv},${e.euro},${e.binance}`)].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `monitor-bs_historial_${historyStart}_${historyEnd}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const rows = [['Fecha', 'BCV (Bs)', 'Euro (Bs)', 'Binance P2P (Bs)'], ...entries.map((e) => [e.date, e.bcv, e.euro, e.binance])];
+    downloadBlob(new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' }),
+        `monitor-bs_historial_${historyStart}_${historyEnd}.csv`);
 };
 
-// Carga ExcelJS bajo demanda (solo si el usuario exporta a Excel) para no
-// sumar ~950KB a la carga inicial de la PWA.
-let exceljsLoadPromise = null;
-const loadExcelJS = () => {
-    if (window.ExcelJS) return Promise.resolve();
-    if (exceljsLoadPromise) return exceljsLoadPromise;
-    exceljsLoadPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('No se pudo cargar ExcelJS'));
-        document.head.appendChild(script);
-    });
-    return exceljsLoadPromise;
-};
+// ExcelJS (~950KB) se carga solo cuando alguien exporta a Excel
+const loadScriptOnce = (() => {
+    const cache = {};
+    return (src) => {
+        if (!cache[src]) {
+            cache[src] = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = () => resolve();
+                s.onerror = () => { delete cache[src]; reject(new Error(`No se pudo cargar ${src}`)); };
+                document.head.appendChild(s);
+            });
+        }
+        return cache[src];
+    };
+})();
 
 const exportHistoryXLSX = async () => {
     const entries = getFilteredHistoryEntries();
     if (!entries.length) { showToast('No hay datos para exportar', true); return; }
     try {
-        await loadExcelJS();
+        if (!window.ExcelJS) await loadScriptOnce('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
         const workbook = new window.ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Historial');
         sheet.columns = [
@@ -1038,284 +1143,634 @@ const exportHistoryXLSX = async () => {
             { header: 'Euro (Bs)', key: 'euro', width: 14 },
             { header: 'Binance P2P (Bs)', key: 'binance', width: 16 },
         ];
-        entries.forEach(e => sheet.addRow(e));
+        entries.forEach((e) => sheet.addRow(e));
         const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `monitor-bs_historial_${historyStart}_${historyEnd}.xlsx`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+            `monitor-bs_historial_${historyStart}_${historyEnd}.xlsx`);
     } catch (e) {
         console.error('[exportHistoryXLSX]', e);
         showToast('No se pudo exportar a Excel', true);
     }
 };
 
-const setupHistoryAccordion = () => {
-    const toggleBtn = document.getElementById('history-toggle');
-    const panel = document.getElementById('history-panel');
-    const badge = document.getElementById('history-badge');
-    const chevron = document.getElementById('history-chevron');
-    const startInput = document.getElementById('history-start');
-    const endInput = document.getElementById('history-end');
-    const resetBtn = document.getElementById('history-reset');
+const setupHistory = () => {
+    const start = $('history-start');
+    const end = $('history-end');
 
-    if (startInput) startInput.value = historyStart;
-    if (endInput) endInput.value = historyEnd;
-    updateHistoryResetVisibility();
-
-    toggleBtn?.addEventListener('click', () => {
-        const willOpen = panel.classList.contains('hidden');
-        panel.classList.toggle('hidden', !willOpen);
-        badge?.classList.toggle('hidden', willOpen);
-        chevron?.setAttribute('data-lucide', willOpen ? 'chevron-up' : 'chevron-down');
-        lucide.createIcons();
-        if (willOpen) renderHistoryList();
-    });
-
-    startInput?.addEventListener('change', () => {
-        historyStart = startInput.value || getNDaysAgoKey(7);
-        renderHistoryList();
+    openHooks['history-sheet'] = () => {
+        if (start) start.value = historyStart;
+        if (end) end.value = historyEnd;
         updateHistoryResetVisibility();
-    });
-    endInput?.addEventListener('change', () => {
-        historyEnd = endInput.value || toDateKey(new Date());
         renderHistoryList();
-        updateHistoryResetVisibility();
-    });
+    };
 
-    resetBtn?.addEventListener('click', () => {
+    start?.addEventListener('change', () => {
+        historyStart = start.value || getNDaysAgoKey(7);
+        updateHistoryResetVisibility();
+        renderHistoryList();
+    });
+    end?.addEventListener('change', () => {
+        historyEnd = end.value || toDateKey(new Date());
+        updateHistoryResetVisibility();
+        renderHistoryList();
+    });
+    $('history-reset')?.addEventListener('click', () => {
         historyStart = getNDaysAgoKey(7);
         historyEnd = toDateKey(new Date());
-        if (startInput) startInput.value = historyStart;
-        if (endInput) endInput.value = historyEnd;
-        renderHistoryList();
+        if (start) start.value = historyStart;
+        if (end) end.value = historyEnd;
         updateHistoryResetVisibility();
+        renderHistoryList();
     });
-
-    document.getElementById('history-export-csv')?.addEventListener('click', exportHistoryCSV);
-    document.getElementById('history-export-xlsx')?.addEventListener('click', exportHistoryXLSX);
+    $('history-export-csv')?.addEventListener('click', exportHistoryCSV);
+    $('history-export-xlsx')?.addEventListener('click', exportHistoryXLSX);
 };
 
-// ── Fetch de tasas (con Cloudflare Function + fallback dolarapi) ────────────
-const fetchData = async () => {
-    if (!navigator.onLine) {
-        showError('Sin conexión. Mostrando últimas tasas guardadas.');
+// ══════════════════════════════════════════════════════════════
+//  COMPARTIR (con datos de Pago Móvil / Transferencia)
+// ══════════════════════════════════════════════════════════════
+const SHARE_OPTIONS = ['bcv', 'euro', 'binance', 'custom', 'usdt'];
+
+let shareState = {
+    method: 'pm',
+    pm: { bank: '', phone: '', id: '' },
+    tr: { bank: '', account: '', holder: '', id: '' },
+    rates: ['bcv'],
+};
+
+const loadShareState = () => {
+    const saved = store.getJSON(KEYS.share, null);
+    if (!saved) return;
+    shareState = {
+        method: saved.method === 'tr' ? 'tr' : 'pm',
+        pm: { ...shareState.pm, ...saved.pm },
+        tr: { ...shareState.tr, ...saved.tr },
+        rates: Array.isArray(saved.rates) ? saved.rates : shareState.rates,
+    };
+};
+
+const saveShareState = () => store.setJSON(KEYS.share, shareState);
+
+const isShareOptionAvailable = (k) => k !== 'custom' || (customRate.enabled && customRate.value > 0);
+const shareOptionTitle = (k) => (k === 'usdt' ? 'USDT a vender' : rateTitle(k));
+const shareOptionValue = (k) => (k === 'usdt' ? `${formatUsdt(lastUsdtNeeded)} USDT` : `${formatCardTotal(k)} ${cardSuffix(k)}`);
+
+const syncShareMethod = () => {
+    document.querySelectorAll('#share-method [data-method]').forEach((b) => {
+        const selected = b.dataset.method === shareState.method;
+        b.classList.toggle('is-selected', selected);
+        b.setAttribute('aria-selected', String(selected));
+    });
+    $('share-fields-pm')?.classList.toggle('hidden', shareState.method !== 'pm');
+    $('share-fields-tr')?.classList.toggle('hidden', shareState.method !== 'tr');
+};
+
+const renderShareRates = () => {
+    const list = $('share-rates');
+    if (!list) return;
+    list.innerHTML = '';
+    SHARE_OPTIONS.filter(isShareOptionAvailable).forEach((k) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'select-row';
+        row.classList.toggle('is-selected', shareState.rates.includes(k));
+        row.setAttribute('aria-pressed', String(shareState.rates.includes(k)));
+        row.innerHTML = '<span><span class="select-row-title"></span><span class="select-row-sub"></span></span>'
+            + '<span class="select-check"><i data-lucide="check" class="ic-xs"></i></span>';
+        row.querySelector('.select-row-title').textContent = shareOptionTitle(k);
+        row.querySelector('.select-row-sub').textContent = shareOptionValue(k);
+        row.addEventListener('click', () => {
+            const i = shareState.rates.indexOf(k);
+            if (i > -1) shareState.rates.splice(i, 1);
+            else shareState.rates.push(k);
+            saveShareState();
+            row.classList.toggle('is-selected', i === -1);
+            row.setAttribute('aria-pressed', String(i === -1));
+        });
+        list.appendChild(row);
+    });
+    refreshIcons();
+};
+
+const buildShareMessage = () => {
+    const lines = [`Monto: ${amountLabel()}`];
+    SHARE_OPTIONS
+        .filter((k) => shareState.rates.includes(k) && isShareOptionAvailable(k))
+        .forEach((k) => lines.push(`${shareOptionTitle(k)}: ${shareOptionValue(k)}`));
+
+    const f = shareState[shareState.method];
+    const fields = shareState.method === 'pm'
+        ? [['Banco', f.bank], ['Teléfono', f.phone], ['C.I./RIF', f.id]]
+        : [['Banco', f.bank], ['Cuenta', f.account], ['Titular', f.holder], ['C.I./RIF', f.id]];
+    const filled = fields.filter(([, v]) => v && v.trim());
+    if (filled.length) {
+        lines.push('', shareState.method === 'pm' ? 'Datos para Pago Móvil' : 'Datos para Transferencia');
+        filled.forEach(([label, v]) => lines.push(`${label}: ${v.trim()}`));
+    }
+    return lines.join('\n');
+};
+
+const setupShare = () => {
+    openHooks['share-sheet'] = () => {
+        document.querySelectorAll('#share-sheet [data-field]').forEach((input) => {
+            const [group, field] = input.dataset.field.split('.');
+            input.value = shareState[group][field] || '';
+        });
+        syncShareMethod();
+        renderShareRates();
+    };
+
+    document.querySelectorAll('#share-method [data-method]').forEach((b) => {
+        b.addEventListener('click', () => {
+            shareState.method = b.dataset.method;
+            saveShareState();
+            syncShareMethod();
+        });
+    });
+
+    document.querySelectorAll('#share-sheet [data-field]').forEach((input) => {
+        input.addEventListener('input', () => {
+            const [group, field] = input.dataset.field.split('.');
+            shareState[group][field] = input.value;
+            saveShareState();
+        });
+    });
+
+    $('btn-share-send')?.addEventListener('click', async () => {
+        const text = buildShareMessage();
+        const copied = await copyText(text, 'Datos copiados al portapapeles');
+        // En el celular, además, abre el menú nativo para enviarlo por WhatsApp, etc.
+        const isTouch = window.matchMedia('(pointer: coarse)').matches;
+        if (navigator.share && isTouch) {
+            try { await navigator.share({ text }); } catch (e) { /* el usuario canceló */ }
+        }
+        if (copied) closeOverlay('share-sheet');
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCIONES DEL BLOQUE "DIFERENCIA A TASA"
+// ══════════════════════════════════════════════════════════════
+const setupHeroActions = () => {
+    $('btn-copy-usdt')?.addEventListener('click', async () => {
+        if (!(lastUsdtNeeded > 0)) return;
+        const ok = await copyText(lastUsdtNeeded.toFixed(2), `USDT copiado: ${lastUsdtNeeded.toFixed(2)}`);
+        const btn = $('btn-copy-usdt');
+        if (ok && btn) {
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 1500);
+        }
+    });
+
+    // Binance P2P no permite prellenar el monto por URL: se copia (con punto
+    // decimal, como lo espera Binance) para pegarlo al abrir el anuncio.
+    $('btn-binance-p2p')?.addEventListener('click', async () => {
+        if (lastUsdtNeeded > 0) {
+            try { await navigator.clipboard.writeText(lastUsdtNeeded.toFixed(2)); } catch (e) { }
+        }
+        window.open('https://p2p.binance.com/trade/sell/USDT?fiat=VES', '_blank', 'noopener');
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ALERTA DE BRECHA
+// ══════════════════════════════════════════════════════════════
+const getGapThreshold = () => {
+    const n = parseFloat(store.get(KEYS.gapThreshold));
+    return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+// Resalta la tarjeta y notifica una sola vez por día y umbral
+const checkGapAlert = (gapPct) => {
+    const threshold = getGapThreshold();
+    const exceeded = !!threshold && Number.isFinite(gapPct) && gapPct >= threshold;
+    $('gap-card')?.classList.toggle('is-alert', exceeded);
+    if (exceeded) {
+        const sentKey = `${toDateKey(new Date())}:${threshold}`;
+        if (store.get(KEYS.gapAlertSent) !== sentKey) {
+            store.set(KEYS.gapAlertSent, sentKey);
+            const enabled = store.get(KEYS.notifications) === 'true';
+            if (enabled && 'Notification' in window && Notification.permission === 'granted') {
+                new Notification('Brecha cambiaria alta', {
+                    body: `La brecha es de ${NF2.format(gapPct)}% (tu límite: ${NF2.format(threshold)}%)`,
+                    icon: '/icons/icon-192.png',
+                });
+            }
+        }
+    }
+    return { exceeded, threshold };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  CONFIGURACIÓN
+// ══════════════════════════════════════════════════════════════
+const setSwitch = (id, on) => {
+    const el = $(id);
+    if (!el) return;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-checked', String(on));
+};
+
+const syncSettingsUI = () => {
+    setSwitch('toggle-theme', document.documentElement.getAttribute('data-theme') === 'dark');
+    const accent = document.documentElement.getAttribute('data-accent');
+    document.querySelectorAll('#accent-seg [data-accent]').forEach((b) => b.classList.toggle('is-selected', b.dataset.accent === accent));
+    applyView(viewMode);
+
+    setSwitch('toggle-notifications', store.get(KEYS.notifications) === 'true');
+
+    const threshold = getGapThreshold();
+    setSwitch('toggle-gap-alert', !!threshold);
+    $('gap-alert-fields')?.classList.toggle('hidden', !threshold);
+    const gapInput = $('input-gap-threshold');
+    if (gapInput && document.activeElement !== gapInput) gapInput.value = threshold ?? '';
+
+    setSwitch('toggle-custom-rate', customRate.enabled);
+    $('custom-rate-fields')?.classList.toggle('hidden', !customRate.enabled);
+    const nameInput = $('input-custom-rate-name');
+    const valueInput = $('input-custom-rate-value');
+    if (nameInput && document.activeElement !== nameInput) nameInput.value = customRate.name || '';
+    if (valueInput && document.activeElement !== valueInput) valueInput.value = customRate.value || '';
+
+    setText('settings-version', `Monitor Bs. · v${APP_VERSION}`);
+};
+
+const setupSettings = () => {
+    openHooks['settings-sheet'] = syncSettingsUI;
+
+    $('toggle-theme')?.addEventListener('click', () => {
+        applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        syncSettingsUI();
+    });
+
+    document.querySelectorAll('#accent-seg [data-accent]').forEach((b) => {
+        b.addEventListener('click', () => { applyAccent(b.dataset.accent); syncSettingsUI(); });
+    });
+
+    document.querySelectorAll('#view-toggle [data-view], #view-seg [data-view]').forEach((b) => {
+        b.addEventListener('click', () => applyView(b.dataset.view));
+    });
+
+    $('toggle-notifications')?.addEventListener('click', async () => {
+        const next = store.get(KEYS.notifications) !== 'true';
+        if (next && 'Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+        }
+        if (next && 'Notification' in window && Notification.permission === 'denied') {
+            showToast('El navegador bloqueó las notificaciones', true);
+        }
+        store.set(KEYS.notifications, String(next));
+        syncSettingsUI();
+    });
+
+    $('toggle-gap-alert')?.addEventListener('click', () => {
+        if (getGapThreshold()) {
+            store.remove(KEYS.gapThreshold);
+            store.remove(KEYS.gapAlertSent);
+        } else {
+            store.set(KEYS.gapThreshold, String(parseFloat($('input-gap-threshold')?.value) || 40));
+        }
+        syncSettingsUI();
         updateUI();
+    });
+
+    $('input-gap-threshold')?.addEventListener('input', (e) => {
+        const n = parseFloat(e.target.value);
+        if (Number.isFinite(n) && n > 0) {
+            store.set(KEYS.gapThreshold, String(n));
+            updateUI();
+        }
+    });
+
+    $('toggle-custom-rate')?.addEventListener('click', () => {
+        customRate.enabled = !customRate.enabled;
+        saveCustomRate();
+        buildRateCards();
+        updateUI();
+        syncSettingsUI();
+    });
+
+    $('input-custom-rate-name')?.addEventListener('input', (e) => {
+        customRate.name = e.target.value.trim();
+        saveCustomRate();
+        updateUI();
+    });
+
+    $('input-custom-rate-value')?.addEventListener('input', (e) => {
+        const v = parseLocaleNumber(e.target.value);
+        customRate.value = Number.isFinite(v) && v > 0 ? v : 0;
+        saveCustomRate();
+        updateUI();
+    });
+
+    $('btn-open-whats-new')?.addEventListener('click', () => {
+        closeOverlay('settings-sheet');
+        showWhatsNew();
+    });
+
+    $('btn-open-tour')?.addEventListener('click', () => {
+        closeOverlay('settings-sheet');
+        startTour();
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  NOVEDADES Y GUÍA DE USO
+// ══════════════════════════════════════════════════════════════
+const WHATS_NEW = [
+    { icon: 'layout-grid', title: 'Tablero rediseñado', desc: 'Cada tarjeta muestra la fecha, la tasa anterior y cuánto cambió. Elige entre cuadrícula y lista.' },
+    { icon: 'calculator', title: 'Calculadora completa', desc: 'Tasas del día y anteriores listas para insertar, pegar montos, historial de operaciones y guardado como tasa personalizada.' },
+    { icon: 'share-2', title: 'Comparte tus datos de pago', desc: 'Envía tus datos de Pago Móvil o Transferencia junto con los montos calculados.' },
+    { icon: 'arrow-left-right', title: 'Selector de moneda', desc: 'Escribe el monto en Dólares, Euros o Bolívares directamente desde el conversor.' },
+    { icon: 'history', title: 'Historial exportable', desc: 'Consulta las tasas por rango de fechas y expórtalas a CSV o Excel.' },
+    { icon: 'palette', title: 'A tu gusto', desc: 'Tema claro u oscuro, color amarillo o verde, tasa personalizada y alertas cuando la brecha supere tu límite.' },
+];
+
+const renderWhatsNew = () => {
+    const list = $('whats-new-list');
+    if (!list || list.childElementCount) return;
+    WHATS_NEW.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'news-item';
+        row.innerHTML = `<span class="rc-icon"><i data-lucide="${item.icon}" class="ic"></i></span>`
+            + '<div><p class="news-title"></p><p class="news-desc"></p></div>';
+        row.querySelector('.news-title').textContent = item.title;
+        row.querySelector('.news-desc').textContent = item.desc;
+        list.appendChild(row);
+    });
+    refreshIcons();
+};
+
+const markIntroSeen = () => {
+    store.set(KEYS.onboarding, '1');
+    store.set(KEYS.whatsNew, APP_VERSION);
+};
+
+const showWhatsNew = () => {
+    renderWhatsNew();
+    setText('whats-new-version', `Versión ${APP_VERSION}`);
+    openOverlay('whats-new');
+};
+
+const TOUR_STEPS = [
+    { element: '#converter', popover: { title: 'Conversor', description: 'Escribe el monto y se calcula al instante en todas las tasas. Los botones 10, 20, 30… cargan montos frecuentes.' } },
+    { element: '#btn-currency', popover: { title: 'Moneda del monto', description: 'Elige si escribes el monto en Dólares, Euros o Bolívares.' } },
+    { element: '#btn-direction', popover: { title: 'Cambiar dirección', description: 'Alterna con un toque entre divisa → Bs y Bs → divisa.' } },
+    { element: '#conv-actions .conv-icons', popover: { title: 'Acciones rápidas', description: 'Compartir con tus datos de Pago Móvil, copiar el monto a tasa BCV, pegar un monto copiado o borrarlo.' } },
+    { element: '#hero', popover: { title: 'Diferencia a tasa', description: 'Cuántos USDT vender en Binance para cubrir el monto a tasa BCV. El botón copia esa cantidad y abre Binance P2P.' } },
+    { element: '#rates-grid', popover: { title: 'Tasas del día', description: 'Toca una tarjeta para copiar su valor. Cada una muestra la fecha, la tasa anterior y cuánto cambió. La Brecha compara Binance con el BCV.' } },
+    { element: '#view-toggle', popover: { title: 'Cuadrícula o lista', description: 'Elige cómo ver las tarjetas.' } },
+    { element: '#hdr-calc', popover: { title: 'Calculadora', description: 'Suma precios, inserta las tasas con un toque y usa el resultado como monto.' } },
+    { element: '#hdr-history', popover: { title: 'Historial', description: 'Consulta las tasas por fecha y expórtalas a CSV o Excel.' } },
+    { element: '#hdr-settings', popover: { title: 'Configuración', description: 'Tema, color, alertas de brecha, tasa personalizada y esta guía cuando la necesites.' } },
+];
+
+const DRIVER_JS = 'https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js';
+const DRIVER_CSS = 'https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css';
+
+const startTour = async () => {
+    closeAllOverlays();
+    try {
+        if (!document.querySelector(`link[href="${DRIVER_CSS}"]`)) {
+            const css = document.createElement('link');
+            css.rel = 'stylesheet';
+            css.href = DRIVER_CSS;
+            document.head.appendChild(css);
+        }
+        await loadScriptOnce(DRIVER_JS);
+    } catch (e) {
+        showToast('No se pudo cargar la guía', true);
         return;
     }
+    window.scrollTo({ top: 0 });
+    const tour = window.driver.js.driver({
+        showProgress: true,
+        progressText: '{{current}} de {{total}}',
+        nextBtnText: 'Siguiente',
+        prevBtnText: 'Anterior',
+        doneBtnText: '¡Listo!',
+        popoverClass: 'mbs-tour',
+        stagePadding: 6,
+        stageRadius: 14,
+        overlayOpacity: 0.65,
+        smoothScroll: true,
+        steps: TOUR_STEPS.filter((s) => document.querySelector(s.element)),
+        onDestroyed: markIntroSeen,
+    });
+    tour.drive();
+};
 
-    setLoadState(true);
-    showError(null);
-
-    try {
-        let bcv = 0, binance = 0, euro = 0;
-        let apiRateDate = null;
-        let usedCFFunction = false;
-
-        // ─ Intento 1: Cloudflare Pages Function /api/rates ─
-        try {
-            const res = await fetch('/api/rates', { signal: AbortSignal.timeout(8000) });
-            if (res.ok) {
-                const j = await res.json();
-                if (j.bcv && j.binance && j.euro) {
-                    ({ bcv, binance, euro } = j);
-                    if (j.rateDate) apiRateDate = new Date(j.rateDate + 'T12:00:00');
-                    usedCFFunction = true;
-                }
-            }
-        } catch (e) {
-            console.warn('[/api/rates]', e.message);
-        }
-
-        // ─ Intento 2 (fallback): dolarapi.com directo ─
-        if (!usedCFFunction) {
-            const [resUSD, resEUR] = await Promise.all([
-                fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) }),
-                fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) }),
-            ]);
-            if (!resUSD.ok || !resEUR.ok) throw new Error('dolarapi no disponible');
-            const jUSD = await resUSD.json();
-            const jEUR = await resEUR.json();
-            const bcvEntry = jUSD.find(i => i.fuente === 'oficial');
-            const paralelEntry = jUSD.find(i => i.fuente === 'paralelo');
-            bcv = bcvEntry?.promedio ?? 0;
-            binance = paralelEntry?.promedio ?? 0;
-            euro = Array.isArray(jEUR)
-                ? (jEUR.find(i => i.fuente === 'oficial')?.promedio ?? 0)
-                : (jEUR.promedio ?? 0);
-            const rawDate = bcvEntry?.fechaActualizacion ?? null;
-            if (rawDate) {
-                apiRateDate = new Date(rawDate);
-                if (isNaN(apiRateDate.getTime())) apiRateDate = null;
-            }
-        }
-
-        if (!bcv || !binance || !euro) throw new Error('Datos incompletos');
-
-        // Cambio vs. la tasa anterior, para el badge ▲/▼ de cada tarjeta
-        if (hasFetchedOnce) {
-            rateChanges = {
-                bcv: computeRateChange(data.bcv, bcv),
-                binance: computeRateChange(data.binance, binance),
-                euro: computeRateChange(data.euro, euro),
-            };
-        }
-        hasFetchedOnce = true;
-
-        data = { ...data, bcv, binance, euro };
-        rateDate = apiRateDate;
-
-        // Guardar en el historial local (para la sección Historial)
-        const entryDateKey = apiRateDate ? toDateKey(apiRateDate) : toDateKey(new Date());
-        saveHistoryEntry(entryDateKey, { bcv, binance, euro });
-
-    } catch (err) {
-        console.error('[fetchData]', err.message);
-        showError('No se obtuvieron tasas. Intenta actualizar de nuevo en unos minutos.');
-        if (!loadFromStorage()) {
-            data = { ...data, bcv: 419.99, binance: 604.78, euro: 495.61 };
-        }
-    } finally {
-        setLoadState(false);
-        if (!document.getElementById('history-panel')?.classList.contains('hidden')) {
-            renderHistoryList();
-        }
+// Nuevo usuario → guía. Usuario que se actualiza → novedades. Solo una vez.
+let introChecked = false;
+const maybeShowIntro = (isFirstVisit) => {
+    if (introChecked) return;
+    introChecked = true;
+    if (topOverlay()) return;
+    if (!store.get(KEYS.onboarding)) {
+        if (isFirstVisit) setTimeout(startTour, 600);
+        else showWhatsNew();
+    } else if (store.get(KEYS.whatsNew) !== APP_VERSION) {
+        showWhatsNew();
     }
 };
 
-// ── Online/Offline ────────────────────────────────────────────
-const updateOnlineStatus = () => {
-    const badge = document.getElementById('offline-badge');
-    if (!badge) return;
-    badge.classList.toggle('hidden', navigator.onLine);
+const setupWhatsNew = () => {
+    closeHooks['whats-new'] = markIntroSeen;
+    $('whats-new-ok')?.addEventListener('click', () => closeOverlay('whats-new'));
+    $('whats-new-tour')?.addEventListener('click', () => {
+        closeOverlay('whats-new');
+        startTour();
+    });
 };
 
-// ── Instalar banner PWA ───────────────────────────────────────
-const setupInstallBanner = () => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredInstallPrompt = e;
-        if (!localStorage.getItem('pwa-install-dismissed')) {
-            const banner = document.getElementById('install-banner');
-            if (banner) { banner.classList.remove('hidden'); lucide.createIcons(); }
+// ══════════════════════════════════════════════════════════════
+//  CONSULTA DE TASAS (Cloudflare Function + respaldo dolarapi)
+// ══════════════════════════════════════════════════════════════
+const showError = (msg) => {
+    setText('error-text', msg || '');
+    $('error-msg')?.classList.toggle('hidden', !msg);
+};
+
+const setLoadState = (state) => {
+    isLoading = state;
+    $('icon-refresh')?.classList.toggle('animate-spin', state);
+    if (state) {
+        setText('text-update', 'Buscando tasas...');
+    } else if (lastFetchAt) {
+        setText('text-update', `Actualizado ${formatRelative(lastFetchAt).replace('Hoy, ', 'hoy ')}`);
+    }
+    updateUI();
+};
+
+const fetchRates = async () => {
+    // Intento 1: Cloudflare Pages Function
+    try {
+        const res = await fetch('/api/rates', { signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+            const j = await res.json();
+            if (j.bcv && j.binance && j.euro) {
+                return { bcv: j.bcv, binance: j.binance, euro: j.euro, date: j.rateDate ? dateFromKey(j.rateDate) : null };
+            }
         }
-    });
-    document.getElementById('btn-install')?.addEventListener('click', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-        hideBanner();
-    });
-    document.getElementById('btn-install-dismiss')?.addEventListener('click', () => {
-        localStorage.setItem('pwa-install-dismissed', '1');
-        hideBanner();
-    });
-    window.addEventListener('appinstalled', hideBanner);
+    } catch (e) {
+        console.warn('[/api/rates]', e.message);
+    }
+
+    // Intento 2: dolarapi.com directo
+    const [resUSD, resEUR] = await Promise.all([
+        fetch('https://ve.dolarapi.com/v1/dolares', { signal: AbortSignal.timeout(10000) }),
+        fetch('https://ve.dolarapi.com/v1/euros', { signal: AbortSignal.timeout(10000) }),
+    ]);
+    if (!resUSD.ok || !resEUR.ok) throw new Error('dolarapi no disponible');
+    const jUSD = await resUSD.json();
+    const jEUR = await resEUR.json();
+    const bcvEntry = jUSD.find((i) => i.fuente === 'oficial');
+    const parallel = jUSD.find((i) => i.fuente === 'paralelo');
+    const euro = Array.isArray(jEUR) ? jEUR.find((i) => i.fuente === 'oficial')?.promedio : jEUR.promedio;
+    let date = bcvEntry?.fechaActualizacion ? new Date(bcvEntry.fechaActualizacion) : null;
+    if (date && isNaN(date.getTime())) date = null;
+    return { bcv: bcvEntry?.promedio ?? 0, binance: parallel?.promedio ?? 0, euro: euro ?? 0, date };
 };
 
-const hideBanner = () => {
-    const banner = document.getElementById('install-banner');
+let fetchInFlight = null;
+const fetchData = () => {
+    if (fetchInFlight) return fetchInFlight;
+    fetchInFlight = (async () => {
+        if (!navigator.onLine) {
+            showError('Sin conexión. Mostrando las últimas tasas guardadas.');
+            updateUI();
+            return;
+        }
+        setLoadState(true);
+        showError(null);
+        try {
+            const r = await fetchRates();
+            if (!r.bcv || !r.binance || !r.euro) throw new Error('Datos incompletos');
+
+            if (hasFetchedOnce && (r.bcv !== data.bcv || r.binance !== data.binance || r.euro !== data.euro)) {
+                sessionPrev = { bcv: data.bcv, binance: data.binance, euro: data.euro };
+            }
+            hasFetchedOnce = true;
+            data = { ...data, bcv: r.bcv, binance: r.binance, euro: r.euro };
+            rateDate = r.date;
+            lastFetchAt = new Date();
+            saveHistoryEntry(toDateKey(rateDate || lastFetchAt), { bcv: r.bcv, binance: r.binance, euro: r.euro });
+            saveToStorage();
+        } catch (err) {
+            console.error('[fetchData]', err.message);
+            showError('No se obtuvieron tasas. Intenta actualizar de nuevo en unos minutos.');
+            if (!loadFromStorage()) data = { ...data, ...DEFAULT_RATES };
+        } finally {
+            refreshPrevRates();
+            setLoadState(false);
+        }
+    })().finally(() => { fetchInFlight = null; });
+    return fetchInFlight;
+};
+
+// ══════════════════════════════════════════════════════════════
+//  PWA: conexión, instalación y Service Worker
+// ══════════════════════════════════════════════════════════════
+const updateOnlineStatus = () => $('offline-badge')?.classList.toggle('hidden', navigator.onLine);
+
+const hideInstallBanner = () => {
+    const banner = $('install-banner');
     if (!banner) return;
     banner.classList.add('hide');
     setTimeout(() => banner.classList.add('hidden'), 350);
 };
 
-// ── Service Worker ────────────────────────────────────────────
+const setupInstallBanner = () => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        if (!store.get(KEYS.installDismissed)) $('install-banner')?.classList.remove('hidden');
+    });
+    $('btn-install')?.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        hideInstallBanner();
+    });
+    $('btn-install-dismiss')?.addEventListener('click', () => {
+        store.set(KEYS.installDismissed, '1');
+        hideInstallBanner();
+    });
+    window.addEventListener('appinstalled', hideInstallBanner);
+};
+
 const registerServiceWorker = async () => {
     if (!('serviceWorker' in navigator)) return;
     try {
         const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-
-        // Al detectar un nuevo SW, recargar cuando tome el control
         reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'activated') {
-                    console.log('[SW] Nueva versión detectada, recargando...');
-                    window.location.reload();
-                }
+            const worker = reg.installing;
+            worker?.addEventListener('statechange', () => {
+                if (worker.state === 'activated') window.location.reload();
             });
         });
-
         navigator.serviceWorker.addEventListener('message', (e) => {
             if (e.data?.type === 'SYNC_RATES') fetchData();
         });
         if ('SyncManager' in window) reg.sync.register('sync-rates').catch(() => { });
-    } catch (err) { console.warn('[SW]', err); }
+    } catch (err) {
+        console.warn('[SW]', err);
+    }
 };
 
-// ── Event Listeners ───────────────────────────────────────────
-const setupEventListeners = () => {
-    const inputAmount = document.getElementById('input-amount');
-    inputAmount?.addEventListener('input', (e) => {
-        data.amount = Number(e.target.value) || 0;
-        // Quitar active de todos los chips
-        document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
-        updateUI();
-    });
-    inputAmount?.addEventListener('focus', () => inputAmount.select());
-
-    // Botones rápidos de monto
-    document.querySelectorAll('.quick-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const val = Number(btn.dataset.amount);
-            data.amount = val;
-            const input = document.getElementById('input-amount');
-            if (input) input.value = val;
-            // Highlight del chip activo
-            document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            updateUI();
-        });
-    });
-
-    document.getElementById('btn-refresh')?.addEventListener('click', fetchData);
-    document.getElementById('btn-main')?.addEventListener('click', fetchData);
-
+const setupGlobalListeners = () => {
+    $('btn-refresh')?.addEventListener('click', () => fetchData());
     window.addEventListener('online', () => { updateOnlineStatus(); fetchData(); });
     window.addEventListener('offline', updateOnlineStatus);
-
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        try {
-            const { savedAt } = JSON.parse(raw);
-            if (Date.now() - new Date(savedAt).getTime() > 5 * 60 * 1000) fetchData();
-        } catch { fetchData(); }
+        if (!lastFetchAt || Date.now() - lastFetchAt.getTime() > 5 * 60 * 1000) fetchData();
     });
 };
 
-// ── Init ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+//  INICIO
+// ══════════════════════════════════════════════════════════════
 const init = () => {
-    loadCustomRate(); // antes de pintar nada: lo necesitan updateUI() y el panel de Configuración
-    setupThemeToggle();
-    lucide.createIcons();
-    updateOnlineStatus();
-    setupEventListeners();
-    setupInstallBanner();
-    setupTooltips();
-    setupCurrencyModeToggle();
-    setupCopyBtn();
-    setupShareBtn();
-    setupBinanceAction();
-    setupRateCardCopy();
-    setupSettingsModal();
-    setupHistoryAccordion();
+    const isFirstVisit = !store.get(KEYS.data) && !store.get(KEYS.onboarding);
+
+    loadCustomRate();
+    loadShareState();
+    const savedCurrency = store.get(KEYS.currency);
+    if (CURRENCY[savedCurrency]) {
+        inputCurrency = savedCurrency;
+        if (savedCurrency !== 'bs') lastForeign = savedCurrency;
+    }
+    viewMode = store.get(KEYS.view) === 'list' ? 'list' : 'grid';
+
+    buildRateCards();
+    applyView(viewMode);
+    refreshIcons();
+
+    setupOverlays();
+    setupConverter();
+    setupHeroActions();
     setupCalculator();
+    setupHistory();
+    setupShare();
+    setupSettings();
+    setupWhatsNew();
+    setupInstallBanner();
+    setupGlobalListeners();
+    updateOnlineStatus();
     registerServiceWorker();
 
     if (loadFromStorage()) {
-        updateUI();
-        set('text-update', 'Cargando tasas...');
+        refreshPrevRates();
+        setText('text-update', 'Cargando tasas...');
     }
-    fetchData();
+    updateUI();
+
+    fetchData().then(() => {
+        maybeShowIntro(isFirstVisit);
+        backfillHistory();
+    });
 };
 
 if (document.readyState === 'loading') {
