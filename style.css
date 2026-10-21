@@ -94,6 +94,15 @@
 
 html {
     -webkit-text-size-adjust: 100%;
+    /* Evita el zoom por doble toque en iOS sin bloquear el zoom con dos dedos */
+    touch-action: manipulation;
+}
+
+/* iOS hace zoom al enfocar campos con letra menor a 16px */
+input,
+select,
+textarea {
+    font-size: 16px;
 }
 
 body {
@@ -159,7 +168,56 @@ svg.lucide {
 .app {
     max-width: 460px;
     margin: 0 auto;
-    padding: 0 16px calc(28px + env(safe-area-inset-bottom));
+    /* espacio para la barra fija inferior */
+    padding: 0 16px calc(96px + env(safe-area-inset-bottom));
+}
+
+/* ── Barra fija inferior ── */
+.bottom-dock {
+    position: fixed;
+    left: 50%;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 22px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-glass);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--shadow);
+    max-width: calc(100vw - 32px);
+}
+
+.dock-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border: none;
+    border-radius: 16px;
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: transform 0.1s, opacity 0.15s;
+}
+
+.dock-btn:active {
+    transform: scale(0.96);
+}
+
+.dock-btn-primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.dock-btn.is-active {
+    opacity: 0.85;
 }
 
 .app-main {
@@ -537,6 +595,16 @@ svg.lucide {
 .usdt-sub strong {
     color: var(--text-2);
     font-weight: 600;
+}
+
+.usdt-price {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-3);
+}
+
+.usdt-price:empty {
+    display: none;
 }
 
 .binance-btn {
@@ -1222,7 +1290,7 @@ svg.lucide {
     color: var(--text);
     border-radius: 13px;
     padding: 12px 14px;
-    font-size: 14px;
+    font-size: 16px;
     outline: none;
     transition: border-color 0.15s;
 }
@@ -1644,7 +1712,7 @@ input[type=number] {
 
 .history-filters .field-input {
     padding: 10px 10px;
-    font-size: 13px;
+    font-size: 16px;
 }
 
 .history-sep {
@@ -1957,7 +2025,7 @@ input[type=number] {
     outline: none;
     background: transparent;
     color: var(--text);
-    font-size: 15px;
+    font-size: 16px;
     text-align: right;
     padding: 4px 0;
 }
@@ -1979,7 +2047,7 @@ input[type=number] {
     color: var(--text);
     border-radius: 9px;
     padding: 5px 6px;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 600;
 }
 
@@ -2165,7 +2233,8 @@ input[type=number] {
 .toast {
     position: fixed;
     left: 50%;
-    bottom: calc(22px + env(safe-area-inset-bottom));
+    /* por encima de la barra fija inferior */
+    bottom: calc(84px + env(safe-area-inset-bottom));
     transform: translateX(-50%);
     z-index: 300;
     display: flex;
@@ -2201,53 +2270,58 @@ input[type=number] {
 }
 
 /* =============================================
-   BANNER PWA
+   CÓMO INSTALAR
    ============================================= */
-.install-banner {
-    position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    z-index: 90;
-    max-width: 428px;
-    margin: 0 auto;
+.install-steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 18px;
-    border: 1px solid var(--border-strong);
-    background: var(--sheet-bg);
-    box-shadow: var(--shadow);
-    transition: transform 0.3s ease, opacity 0.3s ease;
-}
-
-.install-banner.hide {
-    transform: translateY(130%);
-    opacity: 0;
-    pointer-events: none;
-}
-
-.install-banner-text {
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 10px;
 }
 
-.install-title {
-    font-size: 13px;
+.install-steps li {
+    counter-increment: step;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.install-steps li::before {
+    content: counter(step);
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent-ink);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.install-steps strong {
     font-weight: 700;
 }
 
-.install-sub {
-    font-size: 11px;
+.install-note {
+    font-size: 12px;
     color: var(--text-3);
+    line-height: 1.5;
 }
 
-.install-banner-actions {
-    display: flex;
-    gap: 6px;
+.install-note:empty {
+    display: none;
 }
 
 /* =============================================

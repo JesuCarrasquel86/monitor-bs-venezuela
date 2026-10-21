@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.1.0">
+    <link rel="stylesheet" href="style.css?v=3.2.0">
 </head>
 
 <body>
@@ -48,9 +48,6 @@
                 </span>
                 <button id="btn-refresh" class="icon-btn" type="button" title="Actualizar tasas" aria-label="Actualizar tasas">
                     <i data-lucide="refresh-cw" class="ic" id="icon-refresh"></i>
-                </button>
-                <button id="hdr-install" class="icon-btn hidden" type="button" title="Instalar app" aria-label="Instalar app">
-                    <i data-lucide="download" class="ic"></i>
                 </button>
                 <button id="hdr-calc" class="icon-btn" type="button" data-opens="calc-sheet" title="Calculadora" aria-label="Calculadora">
                     <i data-lucide="calculator" class="ic"></i>
@@ -160,6 +157,7 @@
                     </button>
                 </div>
                 <p class="usdt-sub" id="usdt-sub"></p>
+                <p class="usdt-price" id="usdt-price"></p>
                 <a id="btn-binance-p2p" class="binance-btn" href="https://p2p.binance.com/trade/sell/USDT?fiat=VES&amp;payment=all-payments"
                     target="_blank" rel="noopener">
                     <i data-lucide="external-link" class="ic-sm"></i>
@@ -168,6 +166,16 @@
             </section>
         </main>
     </div>
+
+    <!-- ── Barra fija inferior ── -->
+    <nav class="bottom-dock" id="bottom-dock" aria-label="Accesos rápidos">
+        <button id="dock-calc" class="dock-btn dock-btn-primary" type="button" data-opens="calc-sheet">
+            <i data-lucide="calculator" class="ic"></i><span>Calculadora</span>
+        </button>
+        <button id="dock-install" class="dock-btn hidden" type="button">
+            <i data-lucide="download" class="ic"></i><span>Instalar app</span>
+        </button>
+    </nav>
 
     <!-- ══════════════ Calculadora ══════════════ -->
     <div id="calc-sheet" class="sheet-overlay hidden" aria-hidden="true">
@@ -587,22 +595,30 @@
         <span id="toast-text"></span>
     </div>
 
-    <!-- Banner PWA -->
-    <div id="install-banner" class="install-banner hidden">
-        <div class="install-banner-text">
-            <span class="brand-logo"><i data-lucide="smartphone" class="ic-sm"></i></span>
-            <div>
-                <p class="install-title" id="install-title">Instalar app</p>
-                <p class="install-sub" id="install-sub">Acceso rápido desde tu pantalla</p>
+    <!-- ══════════════ Cómo instalar ══════════════ -->
+    <div id="install-help" class="modal-overlay hidden" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+            <div class="modal-header">
+                <span class="sheet-icon"><i data-lucide="download" class="ic"></i></span>
+                <div>
+                    <h3 id="install-help-title">Instalar la app</h3>
+                    <p class="modal-kicker" id="install-help-kicker"></p>
+                </div>
+                <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                    <i data-lucide="x" class="ic"></i>
+                </button>
             </div>
-        </div>
-        <div class="install-banner-actions">
-            <button id="btn-install-dismiss" class="btn-ghost btn-sm" type="button">No</button>
-            <button id="btn-install" class="btn-primary btn-sm" type="button">Instalar</button>
+            <div class="modal-body">
+                <ol class="install-steps" id="install-steps"></ol>
+                <p class="install-note" id="install-note"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" type="button" data-close>Entendido</button>
+            </div>
         </div>
     </div>
 
-    <script src="app.js?v=3.1.0"></script>
+    <script src="app.js?v=3.2.0"></script>
 </body>
 
 </html>

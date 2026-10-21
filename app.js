@@ -4,7 +4,7 @@
 
 'use strict';
 
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 console.log(`monitor-bs-vz v${APP_VERSION} starting...`);
 
 // ── Claves de almacenamiento (se conservan las de versiones anteriores) ──
@@ -26,9 +26,7 @@ const KEYS = {
     profiles: 'monitor-dolar-pay-profiles',
     onboarding: 'monitor-dolar-onboarding-done',
     whatsNew: 'monitor-dolar-whats-new-seen',
-    installDismissed: 'pwa-install-dismissed',
-    installed: 'pwa-installed',
-    samsungHintDismissed: 'samsung-chrome-hint-dismissed',
+    dayChoice: 'monitor-dolar-day-choice',
 };
 
 // localStorage puede fallar (modo privado, cuota llena): nunca debe romper la app
@@ -67,6 +65,7 @@ let prevRates = null;       // tasas anteriores según el historial
 let nextRates = null;       // tasa BCV del siguiente día hábil, si ya fue publicada
 let useNext = false;        // el usuario eligió calcular con la tasa del día siguiente
 let usdtMode = 'sell';      // 'sell' | 'buy' en Binance
+let binanceQuotes = null;   // { buy, sell }: precio P2P para comprar y para vender USDT
 let lastUsdtNeeded = 0;
 let customRate = { enabled: false, name: 'Mi tasa', value: 0 };
 let viewMode = 'grid';
@@ -259,6 +258,7 @@ const saveToStorage = () => {
         binance: data.binance,
         euro: data.euro,
         rateDate: rateDate ? toDateKey(rateDate) : null,
+        quotes: binanceQuotes,
         savedAt: (lastFetchAt || new Date()).toISOString(),
     });
 };
@@ -269,6 +269,7 @@ const loadFromStorage = () => {
     data = { ...data, bcv: stored.bcv, binance: stored.binance, euro: stored.euro };
     if (stored.rateDate) rateDate = dateFromKey(stored.rateDate);
     if (stored.savedAt) lastFetchAt = new Date(stored.savedAt);
+    if (stored.quotes && stored.quotes.buy > 0 && stored.quotes.sell > 0) binanceQuotes = stored.quotes;
     hasFetchedOnce = true;
     return true;
 };
@@ -311,7 +312,28 @@ const refreshDerivedRates = () => {
 
     const future = entries.filter((e) => e.date > officialKey && e.bcv).sort((a, b) => a.date.localeCompare(b.date))[0];
     nextRates = future ? { key: future.date, date: dateFromKey(future.date), bcv: future.bcv, euro: future.euro } : null;
-    if (!nextRates) useNext = false;
+    resolveUseNext();
+};
+
+// Desde las 5 pm se calcula con la tasa del día siguiente (si ya está publicada).
+// Si el usuario eligió "Hoy" o "Mañana" ese día, se respeta su elección.
+const NEXT_DAY_FROM_HOUR = 17;
+
+const autoUseNext = () => {
+    if (!nextRates) return false;
+    const now = new Date();
+    // El viernes se publica la del lunes: hasta 3 días adelante cuenta como "la siguiente"
+    return now.getHours() >= NEXT_DAY_FROM_HOUR && nextRates.key <= toDateKey(addDays(now, 3));
+};
+
+const resolveUseNext = () => {
+    if (!nextRates) { useNext = false; return; }
+    const choice = store.getJSON(KEYS.dayChoice, null);
+    if (choice && choice.date === toDateKey(new Date()) && choice.nextKey === nextRates.key) {
+        useNext = !!choice.next;
+        return;
+    }
+    useNext = autoUseNext();
 };
 
 // dolarapi publica el histórico diario (incluida la tasa BCV del día siguiente
@@ -589,7 +611,11 @@ const renderRateCard = (key) => {
     setText(`title-${key}`, rateTitle(key));
     setText(`total-${key}`, isLoading && key !== 'custom' ? '--' : formatCardTotal(key));
     setText(`suffix-${key}`, cardSuffix(key));
-    setText(`line1-${key}`, data.amount !== 1 && rate ? `1 ${sym} = ${formatBs(rate)} Bs` : '');
+    if (key === 'binance' && binanceQuotes) {
+        setText('line1-binance', `Compra ${formatBs(binanceQuotes.buy)} · Venta ${formatBs(binanceQuotes.sell)}`);
+    } else {
+        setText(`line1-${key}`, data.amount !== 1 && rate ? `1 ${sym} = ${formatBs(rate)} Bs` : '');
+    }
     setText(`line2-${key}`, cardDateText(key));
 
     const prev = key === 'custom' ? null : prevFor(key);
@@ -663,11 +689,22 @@ const syncDaySeg = () => {
 const setupDaySeg = () => {
     document.querySelectorAll('#day-seg [data-day]').forEach((b) => {
         b.addEventListener('click', () => {
-            useNext = b.dataset.day === 'next' && !!nextRates;
+            if (!nextRates) return;
+            useNext = b.dataset.day === 'next';
+            store.setJSON(KEYS.dayChoice, { date: toDateKey(new Date()), nextKey: nextRates.key, next: useNext });
             updateUI();
-            if (useNext) showToast(`Calculando con la tasa BCV del ${formatLongDate(nextRates.date).toLowerCase()}`, false, 2600);
+            showToast(useNext
+                ? `Calculando con la tasa BCV del ${formatLongDate(nextRates.date).toLowerCase()}`
+                : 'Calculando con la tasa BCV vigente hoy', false, 2600);
         });
     });
+
+    // Si la app queda abierta, a las 5 pm pasa sola a la tasa de mañana
+    setInterval(() => {
+        const before = useNext;
+        resolveUseNext();
+        if (before !== useNext) updateUI();
+    }, 60 * 1000);
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -688,10 +725,40 @@ const binanceHref = () => {
         + `S.browser_fallback_url=${encodeURIComponent(url)};end`;
 };
 
+// Anuncios públicos de Binance P2P. tradeType BUY = el usuario compra USDT
+// (paga el precio más alto); SELL = el usuario vende USDT (recibe el más bajo).
+const BINANCE_ADS_API = 'https://www.binance.com/bapi/c2c/v1/public/c2c/agent/ad-list';
+
+const fetchBinanceSide = async (tradeType) => {
+    const url = `${BINANCE_ADS_API}?fiat=VES&asset=USDT&tradeType=${tradeType}&limit=10`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`Binance P2P HTTP ${res.status}`);
+    const json = await res.json();
+    const items = (json && json.data && Array.isArray(json.data.items)) ? json.data.items : [];
+    // Se descartan anuncios "señuelo" (límite de pocos Bs o casi sin USDT disponibles),
+    // que suelen tener precios fuera de mercado
+    const serious = items.filter((a) => Number(a.price) > 0 && Number(a.tradableAmount) >= 50 && Number(a.maxTransAmount) >= 1000);
+    const pool = (serious.length >= 3 ? serious : items).map((a) => Number(a.price)).filter((p) => p > 0).slice(0, 5);
+    if (!pool.length) throw new Error('Binance P2P sin anuncios');
+    const sorted = [...pool].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+};
+
+const fetchBinanceQuotes = async () => {
+    const [buy, sell] = await Promise.all([fetchBinanceSide('BUY'), fetchBinanceSide('SELL')]);
+    return { buy, sell };
+};
+
+// Precio de Binance para la operación elegida (con respaldo a la tasa general)
+const usdtPrice = () => {
+    if (binanceQuotes) return usdtMode === 'buy' ? binanceQuotes.buy : binanceQuotes.sell;
+    return rates().binance;
+};
+
 const updateUsdtCard = () => {
-    const r = rates();
     const bsAmount = amountInBsOfficial();
-    const usdt = r.binance > 0 ? bsAmount / r.binance : 0;
+    const price = usdtPrice();
+    const usdt = price > 0 ? bsAmount / price : 0;
     lastUsdtNeeded = usdt;
     setText('eq-usdt', isLoading ? '--' : `${formatUsdt(usdt)} USDT`);
 
@@ -699,6 +766,9 @@ const updateUsdtCard = () => {
     fillRichText($('usdt-sub'), usdtMode === 'sell'
         ? ['Lo que debes vender en Binance para recibir ', { strong: `${formatBs(bsAmount)} Bs` }, `${what}.`]
         : ['Lo que compras en Binance con ', { strong: `${formatBs(bsAmount)} Bs` }, `${what}.`]);
+    setText('usdt-price', binanceQuotes && !isLoading
+        ? `Precio P2P para ${usdtMode === 'sell' ? 'vender' : 'comprar'}: ${formatBs(price)} Bs por USDT`
+        : '');
 
     document.querySelectorAll('#usdt-mode [data-mode]').forEach((b) => b.classList.toggle('is-selected', b.dataset.mode === usdtMode));
     setText('binance-btn-text', usdtMode === 'sell' ? 'Copiar y vender en Binance P2P' : 'Copiar y comprar en Binance P2P');
@@ -719,6 +789,7 @@ const setupUsdtCard = () => {
             usdtMode = b.dataset.mode === 'buy' ? 'buy' : 'sell';
             store.set(KEYS.usdtMode, usdtMode);
             updateUsdtCard();
+            popElement('eq-usdt');
         });
     });
 
@@ -2056,12 +2127,12 @@ const setupSettings = () => {
 //  NOVEDADES Y GUÍA DE USO
 // ══════════════════════════════════════════════════════════════
 const WHATS_NEW = [
-    { icon: 'wallet-cards', title: 'Perfiles de pago', desc: 'Guarda tus datos de Pago Móvil o Transferencia (cédula, teléfono, bancos o cuenta) y envíalos con un toque al compartir.' },
-    { icon: 'calendar', title: 'Tasa del día siguiente', desc: 'Cuando el BCV publica la tasa de mañana, aparece "Hoy / Mañana" sobre las tarjetas para calcular con ella.' },
-    { icon: 'arrow-left-right', title: 'Vender o comprar USDT', desc: 'Elige la operación y el botón abre Binance P2P en esa sección. En Android abre directo la app de Binance.' },
-    { icon: 'calculator', title: 'Calculadora más cómoda', desc: 'Toca una tasa para insertarla y otra vez para quitarla. Borrar y C ahora están a la derecha.' },
-    { icon: 'download', title: 'Instala cuando quieras', desc: 'Botón fijo para instalar la app en la cabecera y en Configuración.' },
-    { icon: 'hand', title: 'Cierra deslizando', desc: 'Arrastra hacia abajo la barrita de cualquier ventana para cerrarla. La guía de uso ahora te deja probar cada botón.' },
+    { icon: 'arrow-left-right', title: 'Precios reales de compra y venta', desc: 'El equivalente en USDT usa el precio de Binance P2P para comprar o para vender, según lo que elijas.' },
+    { icon: 'calendar', title: 'Tasa de mañana desde las 5 pm', desc: 'Cuando el BCV ya publicó la tasa del día siguiente, desde las 5 pm se usa sola. Toca "Hoy" si prefieres la vigente.' },
+    { icon: 'calculator', title: 'Barra fija abajo', desc: 'La calculadora y el botón para instalar la app quedan siempre a mano en la parte inferior.' },
+    { icon: 'wallet-cards', title: 'Perfiles de pago', desc: 'Guarda tus datos de Pago Móvil o Transferencia y envíalos con un toque al compartir.' },
+    { icon: 'smartphone', title: 'Mejor en iPhone', desc: 'Ya no hace zoom al tocar campos, y el botón de instalar te muestra los pasos para agregarla a tu inicio.' },
+    { icon: 'hand', title: 'Cierra deslizando', desc: 'Arrastra hacia abajo la barrita de cualquier ventana para cerrarla. La guía te deja probar cada botón.' },
 ];
 
 const renderWhatsNew = () => {
@@ -2098,7 +2169,8 @@ const TOUR_STEPS = [
     { element: '#rates-grid', popover: { title: 'Tasas', description: 'Toca una tarjeta para copiar su valor. Cada una muestra la fecha, la tasa anterior y cuánto cambió. La Brecha compara Binance con el BCV.' } },
     { element: '#view-toggle', popover: { title: 'Cuadrícula o lista', description: 'Elige cómo ver las tarjetas.' } },
     { element: '#hero', popover: { title: 'Equivalente en USDT', description: 'Cuántos USDT vender (o comprar) en Binance para cubrir tu monto a tasa BCV. El botón copia la cantidad y abre Binance P2P.' } },
-    { element: '#hdr-calc', popover: { title: 'Calculadora', description: 'Suma precios, inserta tasas con un toque y usa el resultado como monto.' } },
+    { element: '#dock-calc', popover: { title: 'Calculadora', description: 'Siempre a mano abajo (y también arriba). Suma precios, inserta tasas con un toque y usa el resultado como monto.' } },
+    { element: '#dock-install', popover: { title: 'Instalar la app', description: 'Agrégala a tu pantalla de inicio para abrirla como una app. En iPhone te muestra los pasos.' } },
     { element: '#hdr-history', popover: { title: 'Historial', description: 'Consulta las tasas por fecha y expórtalas a CSV o Excel.' } },
     { element: '#hdr-settings', popover: { title: 'Configuración', description: 'Tema, color, perfiles de pago, alertas, tasa personalizada y esta guía cuando la necesites.' } },
 ];
@@ -2253,8 +2325,18 @@ const fetchData = () => {
         setLoadState(true);
         showError(null);
         try {
-            const r = await fetchRates();
+            const [r, quotes] = await Promise.all([
+                fetchRates(),
+                fetchBinanceQuotes().catch((e) => { console.warn('[Binance P2P]', e.message); return null; }),
+            ]);
             if (!r.bcv || !r.binance || !r.euro) throw new Error('Datos incompletos');
+
+            // Precios reales de Binance P2P (compra/venta). Se ignoran si se alejan
+            // demasiado de la tasa paralela, por si la respuesta viene corrupta.
+            if (quotes && Math.abs((quotes.buy + quotes.sell) / 2 - r.binance) / r.binance < 0.15) {
+                binanceQuotes = quotes;
+                r.binance = Math.round(((quotes.buy + quotes.sell) / 2) * 100) / 100;
+            }
 
             if (hasFetchedOnce && (r.bcv !== data.bcv || r.binance !== data.binance || r.euro !== data.euro)) {
                 sessionPrev = { bcv: data.bcv, binance: data.binance, euro: data.euro };
@@ -2302,97 +2384,79 @@ const chromeIntentUrl = () => {
         + `S.browser_fallback_url=${encodeURIComponent(href)};end`;
 };
 
-const hideInstallBanner = () => {
-    const banner = $('install-banner');
-    if (!banner) return;
-    banner.classList.add('hide');
-    setTimeout(() => banner.classList.add('hidden'), 350);
-};
-
+// El botón "Instalar app" de la barra inferior y de Configuración solo se
+// oculta cuando ya se está usando la app instalada
 const updateInstallUI = () => {
     const standalone = isStandalone();
-    $('hdr-install')?.classList.toggle('hidden', standalone || store.get(KEYS.installed) === '1');
+    $('dock-install')?.classList.toggle('hidden', standalone);
     $('btn-install-row')?.classList.toggle('hidden', standalone);
     let sub = 'Acceso directo en tu pantalla de inicio';
     if (isSamsungInternet()) sub = 'Se abre en Chrome para instalarla sin bloqueos';
-    else if (isIOS()) sub = 'Desde Safari: Compartir → Agregar a inicio';
+    else if (isIOS()) sub = 'Desde Compartir → Agregar a inicio';
     setText('install-row-sub', sub);
 };
 
-// iOS no permite instalar con un botón: hay que hacerlo desde el menú Compartir
-const showIOSInstallHelp = () => {
-    const inSafari = !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
-    const msg = inSafari
-        ? 'En iPhone: toca Compartir (cuadro con flecha) y luego "Agregar a inicio"'
-        : 'En iPhone: toca Compartir y luego "Agregar a inicio" (en iOS 16.3 o anterior, abre la página en Safari)';
-    showToast(msg, false, 6000);
+// Ventana con los pasos, para cuando el navegador no tiene botón de instalar
+// (iPhone/iPad siempre; en otros, si la app ya está instalada o no es compatible)
+const showInstallHelp = () => {
+    const steps = $('install-steps');
+    if (!steps) return;
+    let kicker;
+    let items;
+    let note = '';
+    if (isIOS()) {
+        kicker = 'iPhone / iPad';
+        items = [
+            ['Toca el botón ', { strong: 'Compartir' }, ' (el cuadro con la flecha hacia arriba) en la barra del navegador.'],
+            ['Baja y elige ', { strong: 'Agregar a inicio' }, '.'],
+            ['Toca ', { strong: 'Agregar' }, '. La app aparecerá en tu pantalla de inicio.'],
+        ];
+        note = 'Funciona en Safari. En Chrome u otros navegadores necesitas iOS 16.4 o superior; si no te aparece la opción, abre esta página en Safari.';
+    } else {
+        kicker = 'Desde el menú del navegador';
+        items = [
+            ['Abre el ', { strong: 'menú' }, ' del navegador (⋮ o ☰).'],
+            ['Elige ', { strong: 'Instalar app' }, ' o ', { strong: 'Agregar a la pantalla de inicio' }, '.'],
+            ['Confirma. Si ya la instalaste, ábrela desde tu pantalla de inicio.'],
+        ];
+    }
+    setText('install-help-kicker', kicker);
+    steps.innerHTML = '';
+    items.forEach((parts) => {
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        fillRichText(span, parts);
+        li.appendChild(span);
+        steps.appendChild(li);
+    });
+    setText('install-note', note);
+    openOverlay('install-help');
 };
 
-// Botón fijo de instalación: siempre disponible aunque se cierre el banner
 const installApp = async () => {
     if (isStandalone()) { showToast('Ya estás usando la app instalada'); return; }
     // Samsung Internet genera un APK que Play Protect bloquea en Android 14+
     if (isSamsungInternet()) { window.location.href = chromeIntentUrl(); return; }
     if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
-        const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+        await deferredInstallPrompt.userChoice.catch(() => null);
         deferredInstallPrompt = null;
-        if (choice && choice.outcome === 'accepted') hideInstallBanner();
         return;
     }
-    if (isIOS()) { showIOSInstallHelp(); return; }
-    showToast('Abre el menú del navegador y elige "Instalar app" o "Agregar a la pantalla de inicio"', false, 5000);
+    showInstallHelp();
 };
 
-const setupSamsungInstallHint = () => {
-    window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
-    if (store.get(KEYS.samsungHintDismissed)) return;
-    setText('install-title', 'Instala la app desde Chrome');
-    setText('install-sub', 'Samsung Internet puede bloquear la instalación');
-    setText('btn-install', 'Abrir en Chrome');
-    $('install-banner')?.classList.remove('hidden');
-    $('btn-install')?.addEventListener('click', () => { window.location.href = chromeIntentUrl(); });
-    $('btn-install-dismiss')?.addEventListener('click', () => {
-        store.set(KEYS.samsungHintDismissed, '1');
-        hideInstallBanner();
-    });
-};
-
-// En iPhone no existe el evento de instalación: se muestra el banner con instrucciones
-const setupIOSInstallHint = () => {
-    if (store.get(KEYS.installDismissed)) return;
-    setText('install-title', 'Instala la app en tu iPhone');
-    setText('install-sub', 'Compartir → Agregar a inicio');
-    setText('btn-install', 'Cómo');
-    $('install-banner')?.classList.remove('hidden');
-    $('btn-install')?.addEventListener('click', showIOSInstallHelp);
-    $('btn-install-dismiss')?.addEventListener('click', () => {
-        store.set(KEYS.installDismissed, '1');
-        hideInstallBanner();
-    });
-};
-
-const setupInstallBanner = () => {
-    $('hdr-install')?.addEventListener('click', installApp);
+const setupInstall = () => {
+    $('dock-install')?.addEventListener('click', installApp);
     updateInstallUI();
-    if (isStandalone()) return;
-    if (isSamsungInternet()) { setupSamsungInstallHint(); return; }
-    if (isIOS()) { setupIOSInstallHint(); return; }
-
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
-        deferredInstallPrompt = e;
-        if (!store.get(KEYS.installDismissed)) $('install-banner')?.classList.remove('hidden');
-    });
-    $('btn-install')?.addEventListener('click', installApp);
-    $('btn-install-dismiss')?.addEventListener('click', () => {
-        store.set(KEYS.installDismissed, '1');
-        hideInstallBanner();
+        // En Samsung Internet no se usa: su instalación termina bloqueada
+        if (!isSamsungInternet()) deferredInstallPrompt = e;
     });
     window.addEventListener('appinstalled', () => {
-        store.set(KEYS.installed, '1');
-        hideInstallBanner();
-        updateInstallUI();
+        deferredInstallPrompt = null;
+        showToast('App instalada. Ábrela desde tu pantalla de inicio');
     });
 };
 
@@ -2455,7 +2519,7 @@ const init = () => {
     setupShare();
     setupSettings();
     setupWhatsNew();
-    setupInstallBanner();
+    setupInstall();
     setupGlobalListeners();
     updateOnlineStatus();
     registerServiceWorker();
