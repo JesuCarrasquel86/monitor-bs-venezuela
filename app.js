@@ -27,6 +27,7 @@ const KEYS = {
     onboarding: 'monitor-dolar-onboarding-done',
     whatsNew: 'monitor-dolar-whats-new-seen',
     dayChoice: 'monitor-dolar-day-choice',
+    autoNext: 'monitor-dolar-auto-next',
 };
 
 // localStorage puede fallar (modo privado, cuota llena): nunca debe romper la app
@@ -319,8 +320,11 @@ const refreshDerivedRates = () => {
 // Si el usuario eligió "Hoy" o "Mañana" ese día, se respeta su elección.
 const NEXT_DAY_FROM_HOUR = 17;
 
+// Configurable en Ajustes; activo por defecto
+const isAutoNextEnabled = () => store.get(KEYS.autoNext) !== '0';
+
 const autoUseNext = () => {
-    if (!nextRates) return false;
+    if (!nextRates || !isAutoNextEnabled()) return false;
     const now = new Date();
     // El viernes se publica la del lunes: hasta 3 días adelante cuenta como "la siguiente"
     return now.getHours() >= NEXT_DAY_FROM_HOUR && nextRates.key <= toDateKey(addDays(now, 3));
@@ -2019,6 +2023,7 @@ const syncSettingsUI = () => {
     document.querySelectorAll('#accent-seg [data-accent]').forEach((b) => b.classList.toggle('is-selected', b.dataset.accent === accent));
     applyView(viewMode);
 
+    setSwitch('toggle-auto-next', isAutoNextEnabled());
     setSwitch('toggle-notifications', store.get(KEYS.notifications) === 'true');
 
     const threshold = getGapThreshold();
@@ -2053,6 +2058,15 @@ const setupSettings = () => {
 
     document.querySelectorAll('#view-toggle [data-view], #view-seg [data-view]').forEach((b) => {
         b.addEventListener('click', () => applyView(b.dataset.view));
+    });
+
+    $('toggle-auto-next')?.addEventListener('click', () => {
+        store.set(KEYS.autoNext, isAutoNextEnabled() ? '0' : '1');
+        // El ajuste manda: se olvida la elección manual de hoy para aplicarlo ya
+        store.remove(KEYS.dayChoice);
+        resolveUseNext();
+        syncSettingsUI();
+        updateUI();
     });
 
     $('toggle-notifications')?.addEventListener('click', async () => {

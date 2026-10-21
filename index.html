@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.2.0">
+    <link rel="stylesheet" href="style.css?v=3.2.1">
 </head>
 
 <body>
@@ -169,11 +169,11 @@
 
     <!-- ── Barra fija inferior ── -->
     <nav class="bottom-dock" id="bottom-dock" aria-label="Accesos rápidos">
-        <button id="dock-calc" class="dock-btn dock-btn-primary" type="button" data-opens="calc-sheet">
-            <i data-lucide="calculator" class="ic"></i><span>Calculadora</span>
+        <button id="dock-install" class="fab fab-sm hidden" type="button" title="Instalar app" aria-label="Instalar app">
+            <i data-lucide="download" class="ic"></i>
         </button>
-        <button id="dock-install" class="dock-btn hidden" type="button">
-            <i data-lucide="download" class="ic"></i><span>Instalar app</span>
+        <button id="dock-calc" class="fab fab-main" type="button" data-opens="calc-sheet" title="Calculadora" aria-label="Calculadora">
+            <i data-lucide="calculator" class="ic-md"></i>
         </button>
     </nav>
 
@@ -477,6 +477,20 @@
                     </div>
                 </div>
 
+                <p class="settings-group-label">Tasas</p>
+                <div class="settings-card">
+                    <div class="settings-row">
+                        <span class="settings-row-icon"><i data-lucide="calendar" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Tasa del día siguiente</p>
+                            <p class="settings-row-sub">Usarla desde las 5 pm cuando el BCV ya la publicó</p>
+                        </div>
+                        <button id="toggle-auto-next" class="switch" type="button" role="switch" aria-checked="true" aria-label="Usar la tasa del día siguiente desde las 5 pm">
+                            <span class="switch-knob"></span>
+                        </button>
+                    </div>
+                </div>
+
                 <p class="settings-group-label">Pagos</p>
                 <div class="settings-card">
                     <button class="settings-row settings-row-btn" type="button" data-opens="profiles-sheet">
@@ -618,7 +632,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.2.0"></script>
+    <script src="app.js?v=3.2.1"></script>
 </body>
 
 </html>

@@ -172,52 +172,65 @@ svg.lucide {
     padding: 0 16px calc(96px + env(safe-area-inset-bottom));
 }
 
-/* ── Barra fija inferior ── */
+/* ── Botones flotantes (abajo a la derecha) ── */
 .bottom-dock {
     position: fixed;
-    left: 50%;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-    transform: translateX(-50%);
+    /* alineados con el borde derecho del contenido en pantallas anchas */
+    right: max(16px, calc((100vw - 460px) / 2 + 16px));
+    bottom: calc(18px + env(safe-area-inset-bottom));
     z-index: 50;
     display: flex;
-    gap: 6px;
-    padding: 6px;
-    border-radius: 22px;
-    border: 1px solid var(--border-strong);
-    background: var(--bg-glass);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    box-shadow: var(--shadow);
-    max-width: calc(100vw - 32px);
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
 }
 
-.dock-btn {
+.fab {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 11px 18px;
     border: none;
-    border-radius: 16px;
-    background: var(--surface-3);
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 700;
-    white-space: nowrap;
-    transition: transform 0.1s, opacity 0.15s;
+    border-radius: 50%;
+    transition: transform 0.12s, opacity 0.15s;
 }
 
-.dock-btn:active {
-    transform: scale(0.96);
+.fab:active {
+    transform: scale(0.92);
 }
 
-.dock-btn-primary {
+.fab-main {
+    width: 58px;
+    height: 58px;
     background: var(--accent);
     color: var(--accent-contrast);
+    box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.35);
+    animation: fab-pulse 2.6s ease-in-out infinite;
 }
 
-.dock-btn.is-active {
-    opacity: 0.85;
+.fab-main.is-active {
+    animation: none;
+}
+
+.fab-sm {
+    width: 44px;
+    height: 44px;
+    background: var(--surface-3);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow);
+}
+
+/* Pulso suave: un halo del color de acento que crece y se desvanece */
+@keyframes fab-pulse {
+    0% { box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.35), 0 0 0 0 rgba(var(--accent-rgb), 0.32); }
+    70% { box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.35), 0 0 0 14px rgba(var(--accent-rgb), 0); }
+    100% { box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.35), 0 0 0 0 rgba(var(--accent-rgb), 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fab-main {
+        animation: none;
+    }
 }
 
 .app-main {
@@ -2233,8 +2246,8 @@ input[type=number] {
 .toast {
     position: fixed;
     left: 50%;
-    /* por encima de la barra fija inferior */
-    bottom: calc(84px + env(safe-area-inset-bottom));
+    /* arriba, bajo la cabecera, para no tapar los botones flotantes */
+    top: calc(68px + env(safe-area-inset-top));
     transform: translateX(-50%);
     z-index: 300;
     display: flex;
@@ -2265,7 +2278,7 @@ input[type=number] {
 }
 
 @keyframes toastIn {
-    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
