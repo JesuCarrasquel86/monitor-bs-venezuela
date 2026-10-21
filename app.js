@@ -925,6 +925,8 @@ const updateUI = () => {
         CARD_ORDER.forEach((k) => popElement(`total-${k}`));
         popElement('eq-usdt');
     }
+    // En escritorio la calculadora está siempre a la vista: sus tasas se mantienen al día
+    if (isDesktopLayout && renderCalcChips()) renderCalc();
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -949,6 +951,7 @@ const finishOverlayClose = (el) => {
 };
 
 const openOverlay = (id) => {
+    if (isDocked(id)) { flashTile(DOCKED_PANELS[id]); return; }
     const el = $(id);
     if (!el) return;
     // Si se estaba cerrando, se cancela el cierre y se vuelve a abrir
@@ -990,6 +993,52 @@ const closeOverlay = (id) => {
 
 const closeAllOverlays = () => { while (topOverlay()) closeOverlay(topOverlay()); };
 
+// ── Escritorio: vista bento ──
+// En pantallas anchas la calculadora y el historial dejan de ser hojas y quedan
+// fijos como mosaicos. Se mueve el mismo elemento (con sus eventos) al mosaico.
+const DESKTOP_QUERY = '(min-width: 900px)';
+const DOCKED_PANELS = { 'calc-sheet': 'calc-tile', 'history-sheet': 'history-tile' };
+let isDesktopLayout = false;
+
+const isDocked = (id) => isDesktopLayout && id in DOCKED_PANELS;
+
+// Si algo pide "abrir" un panel que ya está a la vista, se le da un destello
+const flashTile = (tileId) => {
+    const tile = $(tileId);
+    if (!tile) return;
+    tile.scrollIntoView?.({ block: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    if (prefersReducedMotion()) return;
+    tile.classList.remove('is-flash');
+    void tile.offsetWidth;
+    tile.classList.add('is-flash');
+    afterAnimation(tile.querySelector('.sheet') || tile, 800, () => tile.classList.remove('is-flash'));
+};
+
+const applyDesktopLayout = (on) => {
+    if (on === isDesktopLayout) return;
+    if (on) Object.keys(DOCKED_PANELS).forEach((id) => { if (openStack.includes(id)) closeOverlay(id); });
+    isDesktopLayout = on;
+    document.body.classList.toggle('is-desktop', on);
+    Object.entries(DOCKED_PANELS).forEach(([overlayId, tileId]) => {
+        const overlay = $(overlayId);
+        const tile = $(tileId);
+        const sheet = (on ? overlay : tile)?.querySelector('.sheet');
+        if (!sheet) return;
+        sheet.style.transform = '';
+        sheet.setAttribute('role', on ? 'region' : 'dialog');
+        if (on) sheet.removeAttribute('aria-modal');
+        else sheet.setAttribute('aria-modal', 'true');
+        (on ? tile : overlay).appendChild(sheet);
+        if (on) openHooks[overlayId]?.();
+    });
+};
+
+const setupDesktopLayout = () => {
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    applyDesktopLayout(mq.matches);
+    mq.addEventListener?.('change', (e) => applyDesktopLayout(e.matches));
+};
+
 // Arrastrar la barrita (o la cabecera) hacia abajo cierra la hoja
 const setupSheetDrag = () => {
     document.querySelectorAll('.sheet-overlay').forEach((overlay) => {
@@ -1000,6 +1049,7 @@ const setupSheetDrag = () => {
         let dy = 0;
 
         const onDown = (e) => {
+            if (!overlay.contains(sheet)) return; // fijo como mosaico en escritorio
             if (e.button !== undefined && e.button !== 0) return;
             if (e.target.closest('button, input, select, a, label')) return;
             startY = e.clientY;
@@ -1451,10 +1501,11 @@ const renderCalcItems = () => {
 };
 
 // ── Tasas listas para insertar (o quitar) ──
+let calcChipsSignature = '';
 const renderCalcChips = () => {
     const current = $('calc-chips-current');
     const previous = $('calc-chips-prev');
-    if (!current || !previous) return;
+    if (!current || !previous) return false;
 
     const makeChip = (key, value, isPrev) => {
         const b = document.createElement('button');
@@ -1471,17 +1522,21 @@ const renderCalcChips = () => {
         return b;
     };
 
+    const now = ['bcv', 'euro', 'binance', 'custom']
+        .filter((k) => k !== 'custom' || customRate.enabled)
+        .map((k) => [k, getRate(k)])
+        .filter(([, v]) => v > 0);
+    const before = ['bcv', 'euro', 'binance'].map((k) => [k, prevFor(k)]).filter(([, p]) => p);
+    // Solo se reconstruyen si cambió algo (en escritorio esto corre con cada actualización)
+    const signature = JSON.stringify([now, before, chipTitle('custom')]);
+    if (signature === calcChipsSignature) return false;
+    calcChipsSignature = signature;
+
     current.innerHTML = '';
     previous.innerHTML = '';
-    ['bcv', 'euro', 'binance', 'custom'].forEach((k) => {
-        if (k === 'custom' && !customRate.enabled) return;
-        const v = getRate(k);
-        if (v > 0) current.appendChild(makeChip(k, v, false));
-    });
-    ['bcv', 'euro', 'binance'].forEach((k) => {
-        const p = prevFor(k);
-        if (p) previous.appendChild(makeChip(k, p, true));
-    });
+    now.forEach(([k, v]) => current.appendChild(makeChip(k, v, false)));
+    before.forEach(([k, p]) => previous.appendChild(makeChip(k, p, true)));
+    return true;
 };
 
 // ── Historial de operaciones ──
@@ -1604,13 +1659,24 @@ const setupCalculator = () => {
         calcCursor = null;
         calcEchoExpr = '';
         calcJustEvaluated = false;
+        renderCalc(); // en escritorio la calculadora sigue a la vista
         closeOverlay('calc-sheet');
         showToast('Monto actualizado');
     });
 
-    // Teclado físico mientras la calculadora es la hoja visible
+    // Teclado físico: en el teléfono, mientras la hoja está abierta; en escritorio,
+    // siempre que no se esté escribiendo en otro campo ni haya una ventana encima
+    const calcTakesKeys = (e) => {
+        if (topOverlay() === 'calc-sheet') return true;
+        if (!isDesktopLayout || topOverlay()) return false;
+        const focused = document.activeElement;
+        if (focused?.closest?.('input, textarea, select, [contenteditable="true"]')) return false;
+        // Enter sobre otro botón debe seguir pulsando ese botón
+        if (e.key === 'Enter' && focused?.closest?.('button, a') && !focused.closest('#calc-tile')) return false;
+        return true;
+    };
     document.addEventListener('keydown', (e) => {
-        if (topOverlay() !== 'calc-sheet' || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || !calcTakesKeys(e)) return;
         const k = e.key;
         if (/^\d$/.test(k)) calcDigit(k);
         else if (k === '.' || k === ',') calcDigit('.');
@@ -2501,6 +2567,9 @@ const TOUR_STEPS = [
     { element: '#rates-grid', popover: { title: 'Tasas', description: 'Toca una tarjeta para copiar su valor. Cada una muestra la fecha, la tasa anterior y cuánto cambió. La Brecha compara Binance con el BCV.' } },
     { element: '#view-toggle', popover: { title: 'Cuadrícula o lista', description: 'Elige cómo ver las tarjetas.' } },
     { element: '#hero', popover: { title: 'Equivalente en USDT', description: 'Cuántos USDT vender (o comprar) en Binance para cubrir tu monto a tasa BCV. El botón copia la cantidad y abre Binance P2P.' } },
+    { element: '#history-tile', popover: { title: 'Historial', description: 'Las tasas de los últimos días. Cambia las fechas o expórtalas a CSV o Excel.' } },
+    { element: '#calc-tile', popover: { title: 'Calculadora', description: 'Siempre a la vista. Puedes usar el teclado: números, operadores, Enter para el resultado y las flechas para mover el cursor.' } },
+    { element: '#hdr-install', popover: { title: 'Instalar la app', description: 'Instálala en tu computadora para abrirla en su propia ventana.' } },
     { element: '#dock-calc', popover: { title: 'Calculadora', description: 'Siempre a mano abajo (y también arriba). Suma precios, inserta tasas con un toque y usa el resultado como monto.' } },
     { element: '#dock-install', popover: { title: 'Instalar la app', description: 'Agrégala a tu pantalla de inicio para abrirla como una app. En iPhone te muestra los pasos.' } },
     { element: '#hdr-history', popover: { title: 'Historial', description: 'Consulta las tasas por fecha y expórtalas a CSV o Excel.' } },
@@ -2692,13 +2761,14 @@ const fetchData = () => {
         } finally {
             refreshDerivedRates();
             setLoadState(false);
+            if (isDesktopLayout) renderHistoryList();
         }
         // El histórico (tasa de mañana, "Antes") llega aparte, sin bloquear la carga
         syncHistoricos().then((changed) => {
             if (!changed) return;
             refreshDerivedRates();
             updateUI();
-            if (!$('history-sheet')?.classList.contains('hidden')) renderHistoryList();
+            if (isDesktopLayout || !$('history-sheet')?.classList.contains('hidden')) renderHistoryList();
         });
     })().finally(() => { fetchInFlight = null; });
     return fetchInFlight;
@@ -2721,6 +2791,7 @@ const chromeIntentUrl = () => {
 const updateInstallUI = () => {
     const standalone = isStandalone();
     $('dock-install')?.classList.toggle('hidden', standalone);
+    $('hdr-install')?.classList.toggle('hidden', standalone);
     $('btn-install-row')?.classList.toggle('hidden', standalone);
     let sub = 'Acceso directo en tu pantalla de inicio';
     if (isSamsungInternet()) sub = 'Se abre en Chrome para instalarla sin bloqueos';
@@ -2812,6 +2883,7 @@ const installApp = async () => {
 
 const setupInstall = () => {
     $('dock-install')?.addEventListener('click', installApp);
+    $('hdr-install')?.addEventListener('click', installApp);
     updateInstallUI();
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
@@ -2884,6 +2956,7 @@ const init = () => {
     setupSettings();
     setupWhatsNew();
     setupInstall();
+    setupDesktopLayout();
     setupGlobalListeners();
     updateOnlineStatus();
     registerServiceWorker();

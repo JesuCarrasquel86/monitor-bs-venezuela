@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.4.0">
+    <link rel="stylesheet" href="style.css?v=3.4.1">
 </head>
 
 <body>
@@ -54,6 +54,9 @@
                 </button>
                 <button id="hdr-history" class="icon-btn" type="button" data-opens="history-sheet" title="Historial" aria-label="Historial">
                     <i data-lucide="history" class="ic"></i>
+                </button>
+                <button id="hdr-install" class="icon-btn desktop-only hidden" type="button" title="Instalar app" aria-label="Instalar app">
+                    <i data-lucide="download" class="ic"></i>
                 </button>
                 <button id="hdr-settings" class="icon-btn" type="button" data-opens="settings-sheet" title="Configuración" aria-label="Configuración">
                     <i data-lucide="settings" class="ic"></i>
@@ -164,6 +167,10 @@
                     <span id="binance-btn-text">Copiar y vender en Binance P2P</span>
                 </a>
             </section>
+
+            <!-- ── Escritorio: aquí se acomodan el historial y la calculadora como mosaicos ── -->
+            <section class="dock-tile" id="history-tile" aria-label="Historial"></section>
+            <section class="dock-tile" id="calc-tile" aria-label="Calculadora"></section>
         </main>
     </div>
 
@@ -639,7 +646,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.4.0"></script>
+    <script src="app.js?v=3.4.1"></script>
 </body>
 
 </html>

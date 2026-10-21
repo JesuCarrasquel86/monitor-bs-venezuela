@@ -2689,3 +2689,168 @@ a.settings-row-btn {
 @media (prefers-reduced-motion: reduce) {
     .calc-caret { animation: none; }
 }
+
+/* =============================================
+   ESCRITORIO: vista bento (≥ 900px)
+   La calculadora y el historial pasan de hojas a mosaicos fijos (ver app.js)
+   ============================================= */
+.dock-tile,
+.desktop-only {
+    display: none;
+}
+
+@media (min-width: 900px) {
+    body.is-desktop .app {
+        max-width: 1240px;
+        padding: 0 28px 32px;
+    }
+
+    body.is-desktop .bottom-dock,
+    body.is-desktop #hdr-calc,
+    body.is-desktop #hdr-history {
+        display: none;
+    }
+
+    body.is-desktop .desktop-only {
+        display: inline-flex;
+    }
+
+    /* Dos columnas: contenido + calculadora */
+    body.is-desktop .app-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        grid-template-areas:
+            "conv  calc"
+            "rates calc"
+            "usdt  calc"
+            "hist  calc";
+        /* la última fila absorbe la altura sobrante de la calculadora */
+        grid-template-rows: auto auto auto 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    body.is-desktop #converter { grid-area: conv; }
+    body.is-desktop .rates-section { grid-area: rates; }
+    body.is-desktop #hero { grid-area: usdt; }
+    body.is-desktop #history-tile { grid-area: hist; }
+    body.is-desktop #calc-tile { grid-area: calc; }
+
+    /* 2 × 2 junto a la calculadora; en pantallas grandes, todas en una fila */
+    body.is-desktop .rates-grid:not(.is-list) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    /* ── Mosaicos con la calculadora y el historial ── */
+    body.is-desktop .dock-tile {
+        display: block;
+        position: relative;
+        min-width: 0;
+    }
+
+    body.is-desktop #calc-tile {
+        position: sticky;
+        top: 68px; /* igual a su posición natural bajo la cabecera */
+    }
+
+    /* El historial ocupa el alto de su fila sin estirarla con su lista */
+    body.is-desktop #history-tile {
+        align-self: stretch;
+        min-height: 340px;
+    }
+
+    body.is-desktop #history-tile .sheet {
+        position: absolute;
+        inset: 0;
+    }
+
+    body.is-desktop .dock-tile .sheet {
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: var(--surface);
+        box-shadow: none;
+        animation: none;
+        transform: none;
+    }
+
+    body.is-desktop #calc-tile .sheet {
+        max-height: calc(100vh - 92px);
+        max-height: calc(100dvh - 92px);
+    }
+
+    body.is-desktop .dock-tile .sheet-handle,
+    body.is-desktop .dock-tile .sheet-close {
+        display: none;
+    }
+
+    body.is-desktop .dock-tile .sheet-header {
+        padding-top: 14px;
+        touch-action: auto;
+    }
+
+    body.is-desktop .dock-tile .sheet-footer {
+        padding-bottom: 16px;
+    }
+
+    body.is-desktop .dock-tile.is-flash .sheet {
+        animation: tileFlash 0.7s ease;
+    }
+
+    @keyframes tileFlash {
+        0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+        30% { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.35); }
+        100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+    }
+
+    /* Las demás hojas (compartir, configuración...) se abren como diálogo centrado */
+    body.is-desktop .sheet-overlay {
+        align-items: center;
+    }
+
+    body.is-desktop .sheet-overlay .sheet {
+        margin-bottom: 0;
+        max-width: 480px;
+        max-height: 86vh;
+    }
+
+    body.is-desktop .sheet-overlay .sheet-handle {
+        display: none;
+    }
+
+    body.is-desktop .sheet-overlay .sheet-header {
+        padding-top: 16px;
+    }
+}
+
+/* Tres columnas: convertidor y tasas a lo ancho, USDT e historial lado a lado */
+@media (min-width: 1200px) {
+    body.is-desktop .app-main {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 380px;
+        grid-template-areas:
+            "conv  conv  calc"
+            "rates rates calc"
+            "usdt  hist  calc";
+        grid-template-rows: auto auto 1fr;
+    }
+
+    body.is-desktop .rates-grid:not(.is-list) {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    body.is-desktop #hero {
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body.is-desktop #hero .binance-btn {
+        margin-top: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.is-desktop .dock-tile.is-flash .sheet { animation: none; }
+}
