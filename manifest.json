@@ -95,7 +95,7 @@
     "related_applications": [
         {
             "platform": "webapp",
-            "url": "https://monitor-bs-vz.jecb8668.workers.dev/manifest.json"
+            "url": "https://app.bainas.app/manifest.json"
         }
     ]
 }
