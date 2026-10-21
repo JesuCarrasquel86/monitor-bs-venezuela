@@ -1,11 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "monitor-bs-vz",
+  "main": "worker.js",
   "compatibility_date": "2025-09-27",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS",
+    // Solo la raíz pasa por worker.js (para mostrar la landing en bainas.app);
+    // el resto de archivos se sirve directo, sin gastar invocaciones.
+    "run_worker_first": ["/", "/index.html"]
   }
 }
