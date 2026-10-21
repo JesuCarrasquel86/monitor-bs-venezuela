@@ -1,0 +1,9 @@
+# Archivos que no se publican como estáticos en Cloudflare
+.assetsignore
+.gitignore
+wrangler.jsonc
+functions
+branding
+*.ps1
+.git
+.wrangler

@@ -10,3 +10,6 @@ generate-icons.ps1
 node_modules/
 .env
 .env.local
+
+# Cloudflare Wrangler
+.wrangler/
