@@ -1,10 +1,10 @@
 /* ============================================================
-   app.js – Monitor Bs. (PWA)
+   app.js – Bainas (PWA)
    ============================================================ */
 
 'use strict';
 
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.3.0';
 console.log(`monitor-bs-vz v${APP_VERSION} starting...`);
 
 // ── Claves de almacenamiento (se conservan las de versiones anteriores) ──
@@ -2238,7 +2238,7 @@ const syncSettingsUI = () => {
 
     updateSettingsProfilesSub();
     updateInstallUI();
-    setText('settings-version', `Monitor Bs. · v${APP_VERSION}`);
+    setText('settings-version', `Bainas · v${APP_VERSION}`);
 };
 
 const setupSettings = () => {

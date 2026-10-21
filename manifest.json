@@ -1,7 +1,7 @@
 {
-    "name": "monitor-bs-vz",
-    "short_name": "monitor-bs-vz",
-    "description": "Calculadora y monitor de tasas BCV, Euro y Paralelo para Venezuela en tiempo real.",
+    "name": "Bainas: la tasa, sin drama",
+    "short_name": "Bainas",
+    "description": "Bainas: monitor y calculadora de tasas BCV, Euro y USDT (Binance P2P) para Venezuela.",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
@@ -55,13 +55,25 @@
             "src": "icons/icon-192.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
+        },
+        {
+            "src": "icons/icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
         },
         {
             "src": "icons/icon-512.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
+        },
+        {
+            "src": "icons/icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
         }
     ],
     "screenshots": [],

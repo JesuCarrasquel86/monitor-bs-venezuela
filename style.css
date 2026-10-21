@@ -265,25 +265,21 @@ svg.lucide {
 .brand-logo {
     width: 34px;
     height: 34px;
-    border-radius: 10px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: 9px;
+    display: block;
     flex-shrink: 0;
-    background: rgba(var(--accent-rgb), 0.14);
-    color: var(--accent-ink);
 }
 
 .brand-text h1 {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: var(--text-2);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text);
     white-space: nowrap;
 }
 
 .brand-text h1 span {
-    color: var(--text);
+    color: var(--accent-ink);
 }
 
 .brand-text p {
@@ -2203,6 +2199,11 @@ input[type=number] {
 
 .settings-row-btn:hover {
     background: var(--surface-2);
+}
+
+a.settings-row-btn {
+    color: inherit;
+    text-decoration: none;
 }
 
 .settings-row-icon {

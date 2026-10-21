@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Monitor Bs.</title>
+    <title>Bainas · La tasa, sin drama</title>
     <meta name="description" content="Calculadora y monitor de tasas BCV, Euro y Binance P2P para Venezuela.">
     <meta name="theme-color" content="#0a0b0d">
     <meta name="color-scheme" content="dark light">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Monitor Bs">
+    <meta name="apple-mobile-web-app-title" content="Bainas">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
     <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.2.3">
+    <link rel="stylesheet" href="style.css?v=3.3.0">
 </head>
 
 <body>
@@ -36,9 +36,9 @@
         <!-- ── Cabecera ── -->
         <header class="app-header">
             <div class="brand">
-                <div class="brand-logo"><i data-lucide="trending-up" class="ic"></i></div>
+                <img class="brand-logo" src="icons/icon-96.png" alt="" width="34" height="34">
                 <div class="brand-text">
-                    <h1>Monitor <span>Bs.</span></h1>
+                    <h1>bainas<span>$</span></h1>
                     <p id="text-update">Actualizando...</p>
                 </div>
             </div>
@@ -575,6 +575,13 @@
                         </div>
                         <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
                     </button>
+                    <a class="settings-row settings-row-btn" href="privacidad.html">
+                        <span class="settings-row-icon"><i data-lucide="shield-check" class="ic-sm"></i></span>
+                        <div class="settings-row-text">
+                            <p class="settings-row-title">Política de privacidad</p>
+                        </div>
+                        <i data-lucide="chevron-right" class="ic-sm row-chevron"></i>
+                    </a>
                 </div>
 
                 <p class="settings-version" id="settings-version"></p>
@@ -632,7 +639,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.2.3"></script>
+    <script src="app.js?v=3.3.0"></script>
 </body>
 
 </html>
