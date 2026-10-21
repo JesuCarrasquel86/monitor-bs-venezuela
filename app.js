@@ -2644,10 +2644,42 @@ const showInstallHelp = () => {
     openOverlay('install-help');
 };
 
+// Chrome solo detecta la app instalada si el manifest la declara en related_applications
+const isAppInstalled = async () => {
+    try {
+        const apps = await navigator.getInstalledRelatedApps?.();
+        return Boolean(apps?.length);
+    } catch (e) {
+        return false;
+    }
+};
+
+// Chrome avisa que se puede instalar unos segundos después de cargar la página;
+// si el usuario toca antes, se espera ese aviso en vez de mostrar los pasos manuales
+const waitForInstallPrompt = (ms) => new Promise((resolve) => {
+    const done = () => {
+        clearTimeout(timer);
+        window.removeEventListener('beforeinstallprompt', done);
+        resolve(deferredInstallPrompt);
+    };
+    const timer = setTimeout(done, ms);
+    window.addEventListener('beforeinstallprompt', done);
+});
+
 const installApp = async () => {
     if (isStandalone()) { showToast('Ya estás usando la app instalada'); return; }
     // Samsung Internet genera un APK que Play Protect bloquea en Android 14+
     if (isSamsungInternet()) { window.location.href = chromeIntentUrl(); return; }
+    if (!deferredInstallPrompt && await isAppInstalled()) {
+        showToast('La app ya está instalada. Ábrela desde tu pantalla de inicio');
+        return;
+    }
+    // Solo los navegadores tipo Chrome tienen instalación directa; el gesto del
+    // usuario sigue valiendo unos 5 s, así que la espera se queda por debajo
+    if (!deferredInstallPrompt && 'onbeforeinstallprompt' in window) {
+        showToast('Preparando la instalación…');
+        await waitForInstallPrompt(3000);
+    }
     if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
         await deferredInstallPrompt.userChoice.catch(() => null);

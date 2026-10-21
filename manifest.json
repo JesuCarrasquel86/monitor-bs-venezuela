@@ -1,6 +1,7 @@
 {
     "name": "Bainas: la tasa, sin drama",
     "short_name": "Bainas",
+    "id": "/",
     "description": "Bainas: monitor y calculadora de tasas BCV, Euro y USDT (Binance P2P) para Venezuela.",
     "start_url": "/",
     "scope": "/",
@@ -89,6 +90,12 @@
                     "sizes": "96x96"
                 }
             ]
+        }
+    ],
+    "related_applications": [
+        {
+            "platform": "webapp",
+            "url": "https://monitor-bs-vz.jecb8668.workers.dev/manifest.json"
         }
     ]
 }
