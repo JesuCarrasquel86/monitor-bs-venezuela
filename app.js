@@ -171,6 +171,71 @@ const fillRichText = (el, parts) => {
     });
 };
 
+// ── Animaciones ───────────────────────────────────────────────
+const prefersReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)';
+
+// Ejecuta `done` al terminar la animación CSS del elemento (o tras `ms` por si no hay evento)
+const afterAnimation = (el, ms, done) => {
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; done(); };
+    el.addEventListener('animationend', finish, { once: true });
+    setTimeout(finish, ms);
+};
+
+const isShown = (el) => !!el && !el.classList.contains('hidden') && !el.classList.contains('anim-out');
+
+// Muestra con un fundido y un leve deslizamiento
+const showAnimated = (el) => {
+    if (!el) return;
+    if (!el.classList.contains('hidden') && !el.classList.contains('anim-out')) return;
+    el.classList.remove('hidden', 'anim-out');
+    if (prefersReducedMotion()) return;
+    el.classList.remove('anim-in');
+    void el.offsetWidth;
+    el.classList.add('anim-in');
+    afterAnimation(el, 300, () => el.classList.remove('anim-in'));
+};
+
+// Oculta con un fundido; el elemento queda "hidden" al terminar
+const hideAnimated = (el) => {
+    if (!isShown(el)) return;
+    if (prefersReducedMotion()) { el.classList.add('hidden'); return; }
+    el.classList.remove('anim-in');
+    el.classList.add('anim-out');
+    afterAnimation(el, 220, () => {
+        if (!el.classList.contains('anim-out')) return; // se volvió a mostrar entretanto
+        el.classList.remove('anim-out');
+        el.classList.add('hidden');
+    });
+};
+
+const setShownAnimated = (el, shown) => (shown ? showAnimated(el) : hideAnimated(el));
+
+// Para contenidos que se reemplazan: lo viejo sale al instante y lo nuevo entra animado
+const swapAnimated = (hideEl, showEl) => {
+    hideEl?.classList.remove('anim-in', 'anim-out');
+    hideEl?.classList.add('hidden');
+    showAnimated(showEl);
+};
+
+// FLIP: mide, cambia el layout y anima cada elemento desde su posición anterior
+const flipAnimate = (elements, mutate, { fade = [] } = {}) => {
+    const els = elements.filter(Boolean);
+    if (prefersReducedMotion() || !Element.prototype.animate) { mutate(); return; }
+    const first = els.map((el) => el.getBoundingClientRect());
+    mutate();
+    els.forEach((el, i) => {
+        const last = el.getBoundingClientRect();
+        const dx = first[i].left - last.left;
+        const dy = first[i].top - last.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        const frames = [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }];
+        if (fade.includes(el)) { frames[0].opacity = 0.55; frames[1].opacity = 1; }
+        el.animate(frames, { duration: 420, easing: EASE_OUT });
+    });
+};
+
 // ── Toast + portapapeles ──────────────────────────────────────
 let toastTimer = null;
 const showToast = (msg, isError = false, ms = 2200) => {
@@ -178,9 +243,17 @@ const showToast = (msg, isError = false, ms = 2200) => {
     if (!el) return;
     setText('toast-text', msg);
     el.classList.toggle('error', isError);
-    el.classList.remove('hidden');
+    el.classList.remove('hidden', 'is-hiding');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
+    toastTimer = setTimeout(() => {
+        if (prefersReducedMotion()) { el.classList.add('hidden'); return; }
+        el.classList.add('is-hiding');
+        afterAnimation(el, 260, () => {
+            if (!el.classList.contains('is-hiding')) return;
+            el.classList.remove('is-hiding');
+            el.classList.add('hidden');
+        });
+    }, ms);
 };
 
 const copyText = async (text, msg) => {
@@ -389,13 +462,22 @@ const applyAccent = (accent) => {
     store.set(KEYS.accent, accent);
 };
 
-const applyView = (mode) => {
-    viewMode = mode === 'list' ? 'list' : 'grid';
+const applyView = (mode, { animate = false } = {}) => {
+    const next = mode === 'list' ? 'list' : 'grid';
+    const grid = $('rates-grid');
+    const changed = next !== viewMode || (grid && grid.classList.contains('is-list') !== (next === 'list'));
+    viewMode = next;
     store.set(KEYS.view, viewMode);
-    $('rates-grid')?.classList.toggle('is-list', viewMode === 'list');
     document.querySelectorAll('#view-toggle [data-view], #view-seg [data-view]').forEach((b) => {
         b.classList.toggle('is-selected', b.dataset.view === viewMode);
     });
+    if (!grid) return;
+    const mutate = () => grid.classList.toggle('is-list', viewMode === 'list');
+    if (!animate || !changed) { mutate(); return; }
+    // Las tarjetas se deslizan a su nueva posición; lo de abajo las acompaña
+    const cards = [...grid.children];
+    const below = [document.querySelector('.rates-hint'), $('error-msg'), $('hero')].filter(isShown);
+    flipAnimate([...cards, ...below], mutate, { fade: cards });
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -426,8 +508,8 @@ const toggleCurrencyMenu = (open) => {
     const menu = $('currency-menu');
     const btn = $('btn-currency');
     if (!menu || !btn) return;
-    const willOpen = open === undefined ? menu.classList.contains('hidden') : open;
-    menu.classList.toggle('hidden', !willOpen);
+    const willOpen = open === undefined ? !isShown(menu) : open;
+    setShownAnimated(menu, willOpen);
     btn.setAttribute('aria-expanded', String(willOpen));
 };
 
@@ -539,7 +621,7 @@ const setupConverter = () => {
 // ══════════════════════════════════════════════════════════════
 //  TARJETAS DE TASAS
 // ══════════════════════════════════════════════════════════════
-const buildRateCards = () => {
+const buildRateCards = ({ enter = null } = {}) => {
     const grid = $('rates-grid');
     if (!grid) return;
     grid.innerHTML = '';
@@ -572,6 +654,18 @@ const buildRateCards = () => {
     });
 
     refreshIcons();
+
+    // Entrada escalonada (al abrir la app) o solo de la tarjeta indicada
+    if (prefersReducedMotion()) return;
+    const targets = enter === 'all' ? [...grid.children] : (enter ? [grid.querySelector(`[data-rate="${enter}"]`)] : []);
+    targets.filter(Boolean).forEach((card, i) => {
+        card.style.animationDelay = `${i * 45}ms`;
+        card.classList.add('card-in');
+        afterAnimation(card, 600 + i * 45, () => {
+            card.classList.remove('card-in');
+            card.style.animationDelay = '';
+        });
+    });
 };
 
 const onCardClick = (key, card) => {
@@ -680,7 +774,7 @@ const updateRateDateBadge = () => {
 const syncDaySeg = () => {
     const seg = $('day-seg');
     if (!seg) return;
-    seg.classList.toggle('hidden', !nextRates);
+    setShownAnimated(seg, !!nextRates);
     if (!nextRates) return;
     const todayBtn = seg.querySelector('[data-day="today"]');
     if (todayBtn) {
@@ -842,9 +936,27 @@ const closeHooks = {};
 
 const topOverlay = () => openStack[openStack.length - 1] || null;
 
+const OVERLAY_CLOSE_MS = 240;
+const closingTimers = {};
+
+// Termina de ocultar una hoja (al final de su animación de cierre)
+const finishOverlayClose = (el) => {
+    el.classList.remove('is-closing');
+    el.classList.add('hidden');
+    el.style.zIndex = '';
+    const sheet = el.querySelector('.sheet');
+    if (sheet) sheet.style.transform = '';
+};
+
 const openOverlay = (id) => {
     const el = $(id);
-    if (!el || !el.classList.contains('hidden')) return;
+    if (!el) return;
+    // Si se estaba cerrando, se cancela el cierre y se vuelve a abrir
+    if (el.classList.contains('is-closing')) {
+        clearTimeout(closingTimers[id]);
+        finishOverlayClose(el);
+    }
+    if (!el.classList.contains('hidden')) return;
     toggleCurrencyMenu(false);
     suspendTourIfActive();
     if (openHooks[id]) openHooks[id]();
@@ -857,14 +969,17 @@ const openOverlay = (id) => {
     document.querySelectorAll(`[data-opens="${id}"]`).forEach((b) => b.classList.add('is-active'));
 };
 
+// El estado (pila, botones activos, hooks) cambia al instante; lo visual se anima
 const closeOverlay = (id) => {
     const el = $(id);
-    if (!el || el.classList.contains('hidden')) return;
-    el.classList.add('hidden');
+    if (!el || el.classList.contains('hidden') || el.classList.contains('is-closing')) return;
     el.setAttribute('aria-hidden', 'true');
-    el.style.zIndex = '';
-    const sheet = el.querySelector('.sheet');
-    if (sheet) sheet.style.transform = '';
+    if (prefersReducedMotion()) {
+        finishOverlayClose(el);
+    } else {
+        el.classList.add('is-closing');
+        closingTimers[id] = setTimeout(() => finishOverlayClose(el), OVERLAY_CLOSE_MS);
+    }
     const i = openStack.lastIndexOf(id);
     if (i > -1) openStack.splice(i, 1);
     if (!openStack.length) document.body.classList.remove('no-scroll');
@@ -904,8 +1019,8 @@ const setupSheetDrag = () => {
             startY = null;
             sheet.classList.remove('is-dragging');
             if (dy > 110 || (dy > 30 && speed > 0.6)) {
-                sheet.style.transform = 'translateY(100%)';
-                setTimeout(() => closeOverlay(overlay.id), 180);
+                // La animación de cierre continúa desde donde se soltó
+                closeOverlay(overlay.id);
             } else {
                 sheet.style.transform = '';
             }
@@ -932,7 +1047,7 @@ const setupOverlays = () => {
 
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        if (!$('currency-menu')?.classList.contains('hidden')) { toggleCurrencyMenu(false); return; }
+        if (isShown($('currency-menu'))) { toggleCurrencyMenu(false); return; }
         if (topOverlay()) closeOverlay(topOverlay());
     });
 
@@ -1259,10 +1374,11 @@ const renderCalcHistory = () => {
 };
 
 const setCalcHistoryVisible = (visible) => {
-    $('calc-history-panel')?.classList.toggle('hidden', !visible);
-    $('calc-chips-block')?.classList.toggle('hidden', visible);
+    const panel = $('calc-history-panel');
+    const chips = $('calc-chips-block');
+    if (visible) { renderCalcHistory(); swapAnimated(chips, panel); }
+    else swapAnimated(panel, chips);
     $('calc-history-toggle')?.classList.toggle('is-active', visible);
-    if (visible) renderCalcHistory();
 };
 
 const setupCalculator = () => {
@@ -1286,7 +1402,7 @@ const setupCalculator = () => {
     });
 
     $('calc-history-toggle')?.addEventListener('click', () => {
-        setCalcHistoryVisible($('calc-history-panel')?.classList.contains('hidden'));
+        setCalcHistoryVisible(!isShown($('calc-history-panel')));
     });
 
     $('calc-history-clear')?.addEventListener('click', () => {
@@ -1304,7 +1420,7 @@ const setupCalculator = () => {
         if (v === null || v <= 0) { showToast('Necesitas un resultado mayor a 0', true); return; }
         customRate = { ...customRate, enabled: true, value: Math.round(v * 100) / 100 };
         saveCustomRate();
-        buildRateCards();
+        buildRateCards({ enter: 'custom' });
         updateUI();
         renderCalcChips();
         renderCalc();
@@ -1355,6 +1471,13 @@ const renderHistoryList = () => {
     if (!list) return;
     const entries = getFilteredHistoryEntries();
     list.innerHTML = '';
+    // Al cambiar el rango, la lista nueva entra con un fundido
+    if (!prefersReducedMotion()) {
+        list.classList.remove('anim-in');
+        void list.offsetWidth;
+        list.classList.add('anim-in');
+        afterAnimation(list, 300, () => list.classList.remove('anim-in'));
+    }
 
     if (!entries.length) {
         const empty = document.createElement('p');
@@ -1708,17 +1831,25 @@ const editorSetType = (type) => {
         b.setAttribute('aria-selected', String(sel));
     });
     document.querySelectorAll('#profile-editor [data-for]').forEach((el) => {
-        el.classList.toggle('hidden', el.dataset.for !== editingProfile.type);
+        if (el.dataset.for === editingProfile.type) showAnimated(el);
+        else { el.classList.remove('anim-in', 'anim-out'); el.classList.add('hidden'); }
     });
 };
 
-const editorRenderBanks = () => {
+const updateBanksSummary = () => {
     if (!editingProfile) return;
     setText('pf-banks-summary', editingProfile.banks.length
         ? editingProfile.banks.map((c) => bankName(c)).join(', ')
         : 'Ninguno');
+};
+
+// La lista se arma una vez por edición; tocar un banco solo cambia su estado
+// (reconstruirla hacía saltar el scroll)
+const editorRenderBanks = () => {
+    if (!editingProfile) return;
+    updateBanksSummary();
     const list = $('pf-banks-list');
-    if (!list || list.classList.contains('hidden')) return;
+    if (!list) return;
     list.innerHTML = '';
     BANKS.forEach(([code, name]) => {
         const item = document.createElement('button');
@@ -1734,7 +1865,9 @@ const editorRenderBanks = () => {
             const i = editingProfile.banks.indexOf(code);
             if (i > -1) editingProfile.banks.splice(i, 1);
             else editingProfile.banks.push(code);
-            editorRenderBanks();
+            item.classList.toggle('is-selected', i === -1);
+            item.setAttribute('aria-pressed', String(i === -1));
+            updateBanksSummary();
         });
         list.appendChild(item);
     });
@@ -1769,7 +1902,9 @@ const openProfileEditor = (profile) => {
     $('pf-phone').value = editingProfile.phoneNumber;
     $('pf-holder').value = editingProfile.holder;
     $('pf-account').value = editingProfile.account;
+    $('pf-banks-list')?.classList.remove('anim-in', 'anim-out');
     $('pf-banks-list')?.classList.add('hidden');
+    $('pf-banks-chevron')?.classList.remove('is-open');
     $('pf-banks-toggle')?.setAttribute('aria-expanded', 'false');
     $('btn-profile-delete')?.classList.toggle('hidden', editingIsNew);
     setDeleteLabel('Eliminar perfil');
@@ -1841,10 +1976,10 @@ const setupProfiles = () => {
     $('pf-banks-toggle')?.addEventListener('click', () => {
         const list = $('pf-banks-list');
         if (!list) return;
-        const willOpen = list.classList.contains('hidden');
-        list.classList.toggle('hidden', !willOpen);
+        const willOpen = !isShown(list);
+        setShownAnimated(list, willOpen);
         $('pf-banks-toggle').setAttribute('aria-expanded', String(willOpen));
-        editorRenderBanks();
+        $('pf-banks-chevron')?.classList.toggle('is-open', willOpen);
     });
 
     // Eliminar pide un segundo toque para evitar borrados accidentales
@@ -1922,13 +2057,24 @@ const renderShareProfiles = () => {
         return;
     }
     if (shareSelectedProfile !== 'none' && !getProfile(shareSelectedProfile)) shareSelectedProfile = payProfiles.defaultId || 'none';
+    // Elegir un perfil solo mueve la marca (sin reconstruir la lista)
+    const select = (id) => {
+        shareSelectedProfile = id;
+        list.querySelectorAll('.select-row').forEach((r) => {
+            const on = r.dataset.profile === id;
+            r.classList.toggle('is-selected', on);
+            r.setAttribute('aria-pressed', String(on));
+        });
+    };
+    const addRow = (id, title, sub) => {
+        const row = makeSelectRow(title, sub, shareSelectedProfile === id, () => select(id));
+        row.dataset.profile = id;
+        list.appendChild(row);
+    };
     payProfiles.list.forEach((p) => {
-        const isDefault = p.id === payProfiles.defaultId;
-        list.appendChild(makeSelectRow(`${p.name || 'Personal'}${isDefault ? ' ★' : ''}`, profileSummary(p),
-            shareSelectedProfile === p.id, () => { shareSelectedProfile = p.id; renderShareProfiles(); }));
+        addRow(p.id, `${p.name || 'Personal'}${p.id === payProfiles.defaultId ? ' ★' : ''}`, profileSummary(p));
     });
-    list.appendChild(makeSelectRow('Sin datos de pago', 'Solo los montos', shareSelectedProfile === 'none',
-        () => { shareSelectedProfile = 'none'; renderShareProfiles(); }));
+    addRow('none', 'Sin datos de pago', 'Solo los montos');
     refreshIcons();
 };
 
@@ -1937,13 +2083,15 @@ const renderShareRates = () => {
     if (!list) return;
     list.innerHTML = '';
     SHARE_OPTIONS.filter(isShareOptionAvailable).forEach((k) => {
-        list.appendChild(makeSelectRow(shareOptionTitle(k), shareOptionValue(k), shareRates.includes(k), () => {
+        const row = makeSelectRow(shareOptionTitle(k), shareOptionValue(k), shareRates.includes(k), () => {
             const i = shareRates.indexOf(k);
             if (i > -1) shareRates.splice(i, 1);
             else shareRates.push(k);
             saveShareState();
-            renderShareRates();
-        }));
+            row.classList.toggle('is-selected', i === -1);
+            row.setAttribute('aria-pressed', String(i === -1));
+        });
+        list.appendChild(row);
     });
     refreshIcons();
 };
@@ -2028,12 +2176,12 @@ const syncSettingsUI = () => {
 
     const threshold = getGapThreshold();
     setSwitch('toggle-gap-alert', !!threshold);
-    $('gap-alert-fields')?.classList.toggle('hidden', !threshold);
+    setShownAnimated($('gap-alert-fields'), !!threshold);
     const gapInput = $('input-gap-threshold');
     if (gapInput && document.activeElement !== gapInput) gapInput.value = threshold ?? '';
 
     setSwitch('toggle-custom-rate', customRate.enabled);
-    $('custom-rate-fields')?.classList.toggle('hidden', !customRate.enabled);
+    setShownAnimated($('custom-rate-fields'), customRate.enabled);
     const nameInput = $('input-custom-rate-name');
     const valueInput = $('input-custom-rate-value');
     if (nameInput && document.activeElement !== nameInput) nameInput.value = customRate.name || '';
@@ -2057,7 +2205,7 @@ const setupSettings = () => {
     });
 
     document.querySelectorAll('#view-toggle [data-view], #view-seg [data-view]').forEach((b) => {
-        b.addEventListener('click', () => applyView(b.dataset.view));
+        b.addEventListener('click', () => applyView(b.dataset.view, { animate: true }));
     });
 
     $('toggle-auto-next')?.addEventListener('click', () => {
@@ -2103,7 +2251,7 @@ const setupSettings = () => {
     $('toggle-custom-rate')?.addEventListener('click', () => {
         customRate.enabled = !customRate.enabled;
         saveCustomRate();
-        buildRateCards();
+        buildRateCards({ enter: customRate.enabled ? 'custom' : null });
         updateUI();
         syncSettingsUI();
     });
@@ -2281,8 +2429,8 @@ const setupWhatsNew = () => {
 //  CONSULTA DE TASAS (Cloudflare Function + respaldo dolarapi)
 // ══════════════════════════════════════════════════════════════
 const showError = (msg) => {
-    setText('error-text', msg || '');
-    $('error-msg')?.classList.toggle('hidden', !msg);
+    if (msg) setText('error-text', msg);
+    setShownAnimated($('error-msg'), !!msg);
 };
 
 const setLoadState = (state) => {
@@ -2519,7 +2667,7 @@ const init = () => {
     }
     viewMode = store.get(KEYS.view) === 'list' ? 'list' : 'grid';
 
-    buildRateCards();
+    buildRateCards({ enter: 'all' });
     applyView(viewMode);
     refreshIcons();
 

@@ -2441,3 +2441,154 @@ input[type=number] {
         height: 50px;
     }
 }
+
+/* =============================================
+   TRANSICIONES (todo entra y sale suave)
+   ============================================= */
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes fadeSlideOut {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-6px); }
+}
+
+.anim-in {
+    animation: fadeSlideIn 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.anim-out {
+    animation: fadeSlideOut 0.18s ease both;
+    pointer-events: none;
+}
+
+/* Menú de moneda: crece desde el botón */
+.currency-menu {
+    transform-origin: top left;
+}
+
+.currency-menu.anim-in {
+    animation: menuIn 0.18s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.currency-menu.anim-out {
+    animation: menuOut 0.14s ease both;
+}
+
+@keyframes menuIn {
+    from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes menuOut {
+    to { opacity: 0; transform: scale(0.96) translateY(-4px); }
+}
+
+/* Entrada de tarjetas */
+.rate-card.card-in {
+    animation: cardIn 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes cardIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Cierre de hojas y ventanas */
+.sheet-overlay.is-closing,
+.modal-overlay.is-closing {
+    animation: overlayOut 0.24s ease both;
+    pointer-events: none;
+}
+
+.sheet-overlay.is-closing .sheet {
+    animation: sheetOut 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.modal-overlay.is-closing .modal {
+    animation: modalOut 0.2s ease both;
+}
+
+@keyframes overlayOut {
+    to { opacity: 0; }
+}
+
+/* sin "from": parte de donde esté la hoja (también si se soltó al arrastrarla) */
+@keyframes sheetOut {
+    to { transform: translateY(100%); }
+}
+
+@keyframes modalOut {
+    to { opacity: 0; transform: scale(0.95); }
+}
+
+/* Aviso que se va */
+.toast.is-hiding {
+    animation: toastOut 0.22s ease both;
+}
+
+@keyframes toastOut {
+    to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+/* Marcas de selección que "aparecen" */
+.select-check svg {
+    transform: scale(0.4);
+    opacity: 0;
+    transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s;
+}
+
+.is-selected .select-check svg {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.select-row,
+.bank-item,
+.rate-chip,
+.view-toggle button,
+.seg button,
+.quick-btn {
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.12s ease;
+}
+
+.select-row:active,
+.rate-chip:active,
+.seg button:active,
+.view-toggle button:active,
+.quick-btn:active {
+    transform: scale(0.97);
+}
+
+/* Flecha del desplegable de bancos */
+#pf-banks-chevron {
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+#pf-banks-chevron.is-open {
+    transform: rotate(90deg);
+}
+
+/* Cambio de icono del botón de copiar */
+.icon-btn svg {
+    transition: transform 0.15s ease;
+}
+
+.icon-btn.copied svg {
+    transform: scale(1.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .anim-in,
+    .anim-out,
+    .rate-card.card-in,
+    .sheet-overlay,
+    .modal-overlay,
+    .sheet,
+    .modal,
+    .toast {
+        animation: none !important;
+    }
+}

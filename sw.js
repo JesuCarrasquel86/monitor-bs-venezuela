@@ -4,7 +4,7 @@
                Cache-First para CDNs externos
    ============================================================ */
 
-const CACHE_NAME = 'monitor-dolar-v3.2.1';
+const CACHE_NAME = 'monitor-dolar-v3.2.2';
 const OWN_ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png'];
 
