@@ -4,7 +4,7 @@
                Cache-First para CDNs externos
    ============================================================ */
 
-const CACHE_NAME = 'monitor-dolar-v3.4.5';
+const CACHE_NAME = 'monitor-dolar-v3.4.6';
 const OWN_ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json',
     '/icons/icon-96.png', '/icons/icon-192.png', '/icons/icon-512.png'];
 
@@ -38,7 +38,10 @@ self.addEventListener('fetch', (event) => {
     // para siempre, por lo que las tasas no se refrescaban.
     if (url.hostname.includes('dolarapi.com') || url.pathname.startsWith('/api/')) return;
 
-    const isOwnAsset = OWN_ASSETS.some(a => url.pathname === a || url.pathname === '/');
+    // Las páginas (landing, privacidad, la app) siempre van por red primero,
+    // para que nunca se quede pegada una versión vieja.
+    const isOwnAsset = event.request.mode === 'navigate'
+        || OWN_ASSETS.some(a => url.pathname === a || url.pathname === '/');
 
     if (isOwnAsset) {
         // Network-First: siempre busca la versión más nueva en la red
@@ -47,7 +50,8 @@ self.addEventListener('fetch', (event) => {
                 const clone = res.clone();
                 caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
                 return res;
-            }).catch(() => caches.match(event.request))  // fallback offline
+            }).catch(() => caches.match(event.request)  // fallback offline
+                .then(r => r || (event.request.mode === 'navigate' ? caches.match('/index.html') : r)))
         );
     } else {
         // CDNs externos → Cache-First
