@@ -19,138 +19,595 @@
         if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
             location.replace('https://app.bainas.app/' + location.search);
         }
+        document.documentElement.classList.add('js');
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://ve.dolarapi.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; background: #0a0b0d; }
-        a { color: #f0b90b; }
-        a:hover { color: #ffd54a; }
+        :root {
+            --bg: #0a0b0d;
+            --surface: #111317;
+            --surface-2: #171a1f;
+            --line: #1d2127;
+            --line-2: #2a2f37;
+            --text: #eceef1;
+            --text-2: #9aa1ab;
+            --accent: #f0b90b;
+            --accent-soft: rgba(240, 185, 11, 0.12);
+            --green: #2ebd85;
+        }
+
+        * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+            overflow-x: hidden;
+        }
+        a { color: var(--accent); }
+        a:hover { color: #ffd54a; }
+        h1, h2, h3, p { margin: 0; }
+        .wrap { width: 100%; max-width: 1200px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+        .accent { color: var(--accent); }
+
+        /* ── Encabezado ── */
+        .top { position: sticky; top: 0; z-index: 20; background: rgba(10, 11, 13, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid transparent; transition: border-color .3s; }
+        .top.scrolled { border-bottom-color: var(--line); }
+        .top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px; }
+        .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+        .brand:hover { color: var(--text); }
+        .word { font-weight: 900; letter-spacing: -0.03em; }
+        .brand .word { font-size: 22px; }
+        .top nav { display: flex; align-items: center; gap: 24px; font-size: 15px; }
+        .top nav .link { color: var(--text-2); text-decoration: none; transition: color .2s; }
+        .top nav .link:hover { color: var(--text); }
+        .btn { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; border-radius: 14px; transition: transform .2s, background .2s, border-color .2s; }
+        .btn:active { transform: scale(.97); }
+        .btn-yellow { background: var(--accent); color: var(--bg); padding: 12px 20px; }
+        .btn-yellow:hover { background: #ffd54a; color: var(--bg); }
+        .btn-ghost { border: 1px solid var(--line-2); color: var(--text); padding: 14px 22px; font-weight: 600; }
+        .btn-ghost:hover { border-color: var(--text-2); color: var(--text); }
+        @media (max-width: 720px) { .top nav .link { display: none; } }
+
+        /* ── Hero ── */
+        .hero { position: relative; overflow: hidden; isolation: isolate; }
+        .hero::before {
+            content: ""; position: absolute; z-index: -1; width: 720px; height: 720px; right: -160px; top: -120px;
+            background: radial-gradient(circle, rgba(240, 185, 11, 0.16), transparent 60%);
+            animation: glow 12s ease-in-out infinite alternate; pointer-events: none;
+        }
+        @keyframes glow { to { transform: translate(-120px, 80px) scale(1.15); } }
+        .hero .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 56px; padding-top: 48px; padding-bottom: 88px; }
+        .hero-copy { flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+        .pill { align-self: flex-start; font-size: 14px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(240, 185, 11, 0.3); padding: 8px 14px; border-radius: 999px; display: inline-flex; align-items: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(46, 189, 133, .6); animation: ping 2s infinite; }
+        @keyframes ping { 70% { box-shadow: 0 0 0 8px rgba(46, 189, 133, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 189, 133, 0); } }
+        .hero h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 1.02; font-weight: 900; letter-spacing: -0.04em; }
+        .hero h1 .accent { display: inline-block; background: linear-gradient(90deg, #f0b90b, #ffe08a, #f0b90b); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 4s linear infinite; }
+        @keyframes shine { to { background-position: -200% 0; } }
+        .lead { font-size: 20px; line-height: 1.55; color: var(--text-2); max-width: 560px; }
+        .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+        .store { cursor: default; display: inline-flex; align-items: center; gap: 12px; background: var(--text); color: var(--bg); padding: 14px 22px; border-radius: 14px; }
+        .store small { display: block; font-size: 12px; font-weight: 500; }
+        .store b { display: block; font-size: 18px; font-weight: 800; line-height: 1.1; }
+        .fine { font-size: 14px; color: var(--text-2); }
+
+        /* Entrada escalonada del hero */
+        .js .rise { opacity: 0; transform: translateY(18px); animation: rise .7s cubic-bezier(.2, .7, .2, 1) forwards; }
+        .js .rise:nth-child(2) { animation-delay: .08s; }
+        .js .rise:nth-child(3) { animation-delay: .16s; }
+        .js .rise:nth-child(4) { animation-delay: .24s; }
+        .js .rise:nth-child(5) { animation-delay: .32s; }
+        @keyframes rise { to { opacity: 1; transform: none; } }
+
+        /* ── Mini app del teléfono ── */
+        .stage { flex: 1 1 320px; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; }
+        .phone { width: 300px; height: 610px; background: #000; border-radius: 48px; padding: 12px; border: 1px solid var(--line-2); box-shadow: 0 40px 80px -30px rgba(240, 185, 11, .25); position: relative; animation: float 6s ease-in-out infinite; }
+        @keyframes float { 50% { transform: translateY(-8px); } }
+        .screen { height: 100%; border-radius: 38px; background: var(--bg); overflow: hidden; padding: 18px 14px 14px; display: flex; flex-direction: column; gap: 10px; position: relative; user-select: none; -webkit-user-select: none; }
+        .app-head { display: flex; align-items: center; justify-content: space-between; }
+        .app-head .brand .word { font-size: 16px; }
+        .live { font-size: 10px; font-weight: 700; color: var(--green); display: inline-flex; align-items: center; gap: 5px; letter-spacing: .04em; }
+        .live .dot { width: 6px; height: 6px; }
+        .amount { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+        .amount-top { font-size: 10px; font-weight: 700; color: var(--text-2); letter-spacing: .08em; }
+        .amount-val { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; }
+        .caret { display: inline-block; width: 2px; height: 26px; background: var(--accent); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .amount-res { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .amount-res b { color: var(--text); }
+        .rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .rate { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .25s, background .25s, transform .15s; }
+        .rate:disabled { cursor: default; }
+        .rate.on { border-color: var(--accent); background: rgba(240, 185, 11, .07); }
+        .rate > span { font-size: 9px; font-weight: 700; color: var(--text-2); letter-spacing: .04em; }
+        .rate b { font-size: 16px; font-weight: 800; }
+        .rate b small { font-size: 10px; color: var(--accent); }
+        .keys { margin-top: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+        .chips { display: flex; gap: 6px; }
+        .chip { flex: 1; height: 30px; border: 1px solid var(--line-2); border-radius: 999px; background: transparent; color: var(--text-2); font: 700 12px Inter, system-ui, sans-serif; cursor: pointer; transition: border-color .2s, color .2s, transform .1s; }
+        .chip:active, .chip.press { border-color: var(--accent); color: var(--accent); transform: scale(.94); }
+        .key { height: 46px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text); font: 600 19px Inter, system-ui, sans-serif; cursor: pointer; transition: background .15s, transform .1s; touch-action: manipulation; }
+        .key:active, .key.press { background: #262b33; transform: scale(.94); }
+        .key.k-del { color: var(--accent); }
+        .tap { position: absolute; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; background: rgba(240, 185, 11, .35); border: 2px solid rgba(240, 185, 11, .8); pointer-events: none; opacity: 0; transform: scale(.4); z-index: 5; }
+        .tap.go { animation: tap .5s ease-out; }
+        @keyframes tap { 0% { opacity: 1; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.3); } }
+        .try { font-size: 14px; color: var(--text-2); display: inline-flex; align-items: center; gap: 8px; }
+        .bob { position: absolute; z-index: 2; background: rgba(17, 19, 23, .9); border: 1px solid var(--line-2); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 700; display: none; align-items: center; gap: 8px; box-shadow: 0 12px 30px -12px #000; animation: bob 5s ease-in-out infinite; }
+        .bob small { color: var(--text-2); font-weight: 600; font-size: 11px; }
+        .bob-a { left: -110px; top: 170px; }
+        .bob-b { right: -56px; top: 400px; animation-delay: -2.5s; }
+        @keyframes bob { 50% { transform: translateY(-10px); } }
+        @media (min-width: 1100px) { .bob { display: inline-flex; } }
+
+        /* ── Secciones ── */
+        .section { padding-top: 96px; padding-bottom: 96px; }
+        .eyebrow { font-size: 14px; font-weight: 700; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; }
+        .h2 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; font-weight: 900; letter-spacing: -0.03em; }
+        .sec-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; max-width: 680px; }
+        .sec-head p { font-size: 18px; line-height: 1.55; color: var(--text-2); }
+
+        .js .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s cubic-bezier(.2, .7, .2, 1), transform .7s cubic-bezier(.2, .7, .2, 1); }
+        .js .reveal.in { opacity: 1; transform: none; }
+
+        /* ── Características (bento) ── */
+        .bento { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+        @media (min-width: 680px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .c-wide { grid-column: span 2; } }
+        @media (min-width: 980px) {
+            .bento { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .c-4 { grid-column: span 4; } .c-2 { grid-column: span 2; } .c-3 { grid-column: span 3; }
+            .c-wide { grid-column: span 4; }
+        }
+        .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 26px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; position: relative; transition: border-color .3s, transform .3s; }
+        .card:hover { border-color: var(--line-2); transform: translateY(-3px); }
+        .card h3 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+        .card p { font-size: 16px; line-height: 1.55; color: var(--text-2); }
+        .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; }
+        .viz { margin-top: auto; padding-top: 18px; }
+
+        .ticker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+        .tk { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .tk span { font-size: 11px; font-weight: 700; color: var(--text-2); }
+        .tk b { font-size: 18px; font-weight: 800; }
+        .bars { display: flex; align-items: flex-end; gap: 3px; height: 34px; }
+        .bars i { flex: 1; height: 100%; background: var(--accent); border-radius: 2px; opacity: .85; transform-origin: bottom; transform: scaleY(.2); transition: transform .8s cubic-bezier(.2, .7, .2, 1); }
+        .in .bars i { transform: scaleY(var(--h)); }
+
+        .op { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; font-variant-numeric: tabular-nums; }
+        .op .l1 { font-size: 14px; color: var(--text-2); }
+        .op .l2 { font-size: 24px; font-weight: 800; margin-top: 4px; }
+
+        .paycard { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
+        .paycard b { color: var(--text); }
+        .share { align-self: flex-start; margin-top: 6px; background: var(--green); color: #04130c; font-weight: 800; font-size: 12px; padding: 7px 12px; border-radius: 999px; animation: nudge 2.4s ease-in-out infinite; }
+        @keyframes nudge { 0%, 70%, 100% { transform: none; } 80% { transform: scale(1.08); } 90% { transform: scale(.97); } }
+
+        .gauge { display: flex; align-items: center; gap: 16px; }
+        .gauge svg { flex: none; }
+        .gauge .arc { stroke-dasharray: 251; stroke-dashoffset: 251; transition: stroke-dashoffset 1.4s cubic-bezier(.2, .7, .2, 1); }
+        .in .gauge .arc { stroke-dashoffset: calc(251 - 251 * var(--p)); }
+        .gauge b { font-size: 28px; font-weight: 900; }
+        .gauge small { display: block; font-size: 12px; color: var(--text-2); }
+
+        .switch { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px; position: relative; }
+        .switch span { position: relative; z-index: 1; padding: 8px 16px; font-size: 14px; font-weight: 700; color: var(--text-2); transition: color .3s; }
+        .switch::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--accent); border-radius: 9px; animation: flip 4s ease-in-out infinite; }
+        .switch span:first-child { animation: c1 4s infinite; }
+        .switch span:last-child { animation: c2 4s infinite; }
+        @keyframes flip { 0%, 40% { transform: none; } 50%, 90% { transform: translateX(100%); } 100% { transform: none; } }
+        @keyframes c1 { 0%, 40% { color: var(--bg); } 50%, 90% { color: var(--text-2); } 100% { color: var(--bg); } }
+        @keyframes c2 { 0%, 40% { color: var(--text-2); } 50%, 90% { color: var(--bg); } 100% { color: var(--text-2); } }
+
+        .spark path.ln { stroke-dasharray: 600; stroke-dashoffset: 600; transition: stroke-dashoffset 1.8s ease-out; }
+        .in .spark path.ln { stroke-dashoffset: 0; }
+        .xls { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--green); background: rgba(46, 189, 133, .12); padding: 6px 10px; border-radius: 999px; margin-top: 10px; }
+
+        .wifi { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; font-size: 14px; color: var(--text-2); }
+        .wifi b { color: var(--text); display: block; }
+
+        /* ── ¿Por qué? ── */
+        .why { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+        .why .wrap { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; }
+        .why-l { flex: 1 1 320px; min-width: 0; }
+        .why-l .h2 { margin-top: 12px; }
+        .why-r { flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 18px; font-size: 19px; line-height: 1.6; color: var(--text-2); }
+        .why-r strong { color: var(--text); }
+
+        /* ── Novedades ── */
+        .timeline { position: relative; display: flex; flex-direction: column; gap: 18px; padding-left: 28px; }
+        .timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: linear-gradient(var(--accent), var(--line)); }
+        .rel { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px 24px; }
+        .rel::before { content: ""; position: absolute; left: -28px; top: 26px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); border: 3px solid var(--line-2); }
+        .rel.new::before { border-color: var(--accent); box-shadow: 0 0 0 6px var(--accent-soft); }
+        .rel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .ver { font-size: 13px; font-weight: 800; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 4px 9px; }
+        .rel.new .ver { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+        .rel-head h3 { font-size: 19px; font-weight: 800; }
+        .date { font-size: 13px; color: var(--text-2); margin-left: auto; }
+        .badge { font-size: 11px; font-weight: 800; color: var(--green); background: rgba(46, 189, 133, .12); border-radius: 999px; padding: 4px 9px; letter-spacing: .04em; }
+        .rel ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--text-2); font-size: 16px; line-height: 1.5; }
+        .rel li::marker { color: var(--accent); }
+        .soon { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--text-2); padding: 6px 0 0; }
+        .soon b { color: var(--text); }
+
+        /* ── CTA y pie ── */
+        .cta { background: var(--accent); color: var(--bg); border-radius: 28px; padding: 56px 40px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 28px; }
+        .cta .h2 { font-size: clamp(1.9rem, 4vw, 2.8rem); }
+        .cta p { margin-top: 12px; font-size: 18px; font-weight: 500; }
+        .cta .btn { background: var(--bg); color: var(--text); font-size: 18px; font-weight: 800; padding: 18px 28px; border-radius: 16px; }
+        .cta .btn:hover { color: var(--text); background: #1d2127; }
+        @media (max-width: 520px) { .cta { padding: 40px 24px; } }
+        footer { border-top: 1px solid var(--line); }
+        footer .wrap { padding-top: 32px; padding-bottom: 40px; display: flex; flex-direction: column; gap: 16px; }
+        .foot-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+        .foot-row nav { display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px; }
+        .foot-row nav a { color: var(--text-2); }
+        .legal { font-size: 13px; line-height: 1.6; color: var(--text-2); }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+            .js .rise, .js .reveal { opacity: 1; transform: none; }
+            .bars i { transform: scaleY(var(--h)); }
+            .gauge .arc { stroke-dashoffset: calc(251 - 251 * var(--p)); }
+            .spark path.ln { stroke-dashoffset: 0; }
+        }
     </style>
 </head>
 <body>
-<div style="min-height: 100vh; background: #0a0b0d; color: #eceef1; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column">
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="logo" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="230.4" fill="#F0B90B"></rect><path fill="#0A0B0D" d="M169.97 747.52H391.9C494.01 747.52 554.39 691.25 554.39 614.11C554.39 547.72 508.24 502.2 447.54 499.99V499.35C502.23 488.92 538.59 448.77 538.59 394.08C538.59 325.48 481.68 276.48 374.2 276.48H169.97ZM297.69 648.89V555.94H367.24C399.17 555.94 419.72 574.28 419.72 602.41C419.72 630.55 399.17 648.89 367.24 648.89ZM297.69 463V375.11H359.34C388.42 375.11 407.08 392.5 407.08 419.06C407.08 445.61 388.42 463 359.34 463Z"></path><path fill="#0A0B0D" d="M687.64 797.14H736.35V751.84C811.69 744.33 854.03 705.18 854.03 641.45C854.03 587.28 821.02 557.23 743.18 542.89L736.35 541.53V482.57C750 488.72 758.43 500.33 760.02 515.81H846.97C844.92 452.76 804.41 412.7 736.35 404.5V358.75H687.64V403.82C616.85 410.87 570.19 452.53 570.19 511.25C570.19 561.56 605.7 596.38 671.25 608.9L687.64 612.09V675.37C666.92 669.68 654.41 655.34 653.27 634.62H563.81C563.81 704.73 607.52 745.93 687.64 752.07ZM736.35 674.68V623.47C752.74 629.61 760.48 637.58 760.48 648.51C760.48 660.57 751.37 669.9 736.35 674.68ZM687.64 530.83C672.39 525.14 665.33 517.63 665.33 506.7C665.33 495.09 673.98 485.99 687.64 481.21Z"></path></symbol>
+</svg>
 
-<header style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 20px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
-<a href="#inicio" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #eceef1">
-<svg width="40" height="40" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230.4" fill="#F0B90B"></rect><path fill="#0A0B0D" d="M169.97 747.52H391.9C494.01 747.52 554.39 691.25 554.39 614.11C554.39 547.72 508.24 502.2 447.54 499.99V499.35C502.23 488.92 538.59 448.77 538.59 394.08C538.59 325.48 481.68 276.48 374.2 276.48H169.97ZM297.69 648.89V555.94H367.24C399.17 555.94 419.72 574.28 419.72 602.41C419.72 630.55 399.17 648.89 367.24 648.89ZM297.69 463V375.11H359.34C388.42 375.11 407.08 392.5 407.08 419.06C407.08 445.61 388.42 463 359.34 463Z"></path><path fill="#0A0B0D" d="M687.64 797.14H736.35V751.84C811.69 744.33 854.03 705.18 854.03 641.45C854.03 587.28 821.02 557.23 743.18 542.89L736.35 541.53V482.57C750 488.72 758.43 500.33 760.02 515.81H846.97C844.92 452.76 804.41 412.7 736.35 404.5V358.75H687.64V403.82C616.85 410.87 570.19 452.53 570.19 511.25C570.19 561.56 605.7 596.38 671.25 608.9L687.64 612.09V675.37C666.92 669.68 654.41 655.34 653.27 634.62H563.81C563.81 704.73 607.52 745.93 687.64 752.07ZM736.35 674.68V623.47C752.74 629.61 760.48 637.58 760.48 648.51C760.48 660.57 751.37 669.9 736.35 674.68ZM687.64 530.83C672.39 525.14 665.33 517.63 665.33 506.7C665.33 495.09 673.98 485.99 687.64 481.21Z"></path></svg>
-<span style="font-size: 22px; font-weight: 900; letter-spacing: -0.03em">bainas<span style="color: #f0b90b">$</span></span>
-</a>
-<nav style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px; font-size: 15px">
-<a href="#por-que" style="color: #9aa1ab; text-decoration: none">¿Por qué Bainas?</a>
-<a href="#funciones" style="color: #9aa1ab; text-decoration: none">Funciones</a>
-<a href="https://app.bainas.app/" style="background: #f0b90b; color: #0a0b0d; font-weight: 700; text-decoration: none; padding: 12px 20px; border-radius: 12px">Abrir la app</a>
-</nav>
+<header class="top" id="top">
+    <div class="wrap">
+        <a href="#inicio" class="brand"><svg width="38" height="38" aria-hidden="true"><use href="#logo"></use></svg><span class="word">bainas<span class="accent">$</span></span></a>
+        <nav>
+            <a class="link" href="#caracteristicas">Características</a>
+            <a class="link" href="#novedades">Novedades</a>
+            <a class="link" href="#por-que">¿Por qué Bainas?</a>
+            <a class="btn btn-yellow" href="https://app.bainas.app/">Abrir la app</a>
+        </nav>
+    </div>
 </header>
 
-<section id="inicio" style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 56px 16px 80px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px">
-<div style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
-<div style="align-self: flex-start; font-size: 14px; font-weight: 600; color: #f0b90b; background: rgba(240,185,11,0.12); border: 1px solid rgba(240,185,11,0.3); padding: 8px 14px; border-radius: 999px">Hecha en Venezuela, para Venezuela</div>
-<h1 style="margin: 0; font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 1.02; font-weight: 900; letter-spacing: -0.04em">¿A cómo está el <span style="color: #f0b90b">bainas$</span> hoy?</h1>
-<p style="margin: 0; font-size: 20px; line-height: 1.55; color: #9aa1ab; max-width: 560px">La tasa del BCV, el euro y el USDT en un vistazo, con calculadora para sacar la cuenta en bolívares. La tasa, sin drama.</p>
-<div style="display: flex; flex-wrap: wrap; gap: 12px">
-<span style="cursor: default; display: inline-flex; align-items: center; gap: 12px; background: #eceef1; color: #0a0b0d; text-decoration: none; padding: 14px 22px; border-radius: 14px">
-<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5v17l14-8.5z" fill="#0a0b0d"></path></svg>
-<span style="display: flex; flex-direction: column; line-height: 1.15"><span style="font-size: 12px; font-weight: 500">Muy pronto en</span><span style="font-size: 18px; font-weight: 800">Google Play</span></span>
-</span>
-<a href="https://app.bainas.app/" style="display: inline-flex; align-items: center; gap: 10px; border: 1px solid #2a2f37; color: #eceef1; text-decoration: none; font-weight: 600; padding: 14px 22px; border-radius: 14px">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eceef1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>
-Úsala en el navegador
-</a>
-</div>
-<p style="margin: 0; font-size: 14px; color: #9aa1ab">Gratis. Sin registro. Sin publicidad.</p>
-</div>
+<main>
+<section class="hero" id="inicio">
+    <div class="wrap">
+        <div class="hero-copy">
+            <div class="pill rise"><span class="dot"></span>Hecha en Venezuela, para Venezuela</div>
+            <h1 class="rise">¿A cómo está el <span class="accent">bainas$</span> hoy?</h1>
+            <p class="lead rise">La tasa del BCV, el euro y el USDT en un vistazo, con calculadora para sacar la cuenta en bolívares. La tasa, sin drama.</p>
+            <div class="ctas rise">
+                <span class="store">
+                    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5v17l14-8.5z" fill="#0a0b0d"></path></svg>
+                    <span><small>Muy pronto en</small><b>Google Play</b></span>
+                </span>
+                <a class="btn btn-ghost" href="https://app.bainas.app/">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>
+                    Úsala en el navegador
+                </a>
+            </div>
+            <p class="fine rise">Gratis. Sin registro. Sin publicidad.</p>
+        </div>
 
-<div style="flex: 1 1 300px; display: flex; justify-content: center">
-<div style="width: 300px; height: 620px; box-sizing: border-box; background: #000; border-radius: 48px; padding: 12px; border: 1px solid #2a2f37">
-<div style="height: 100%; border-radius: 38px; background: #0a0b0d; overflow: hidden; padding: 20px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; align-items: center; gap: 8px">
-<svg width="30" height="30" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230.4" fill="#F0B90B"></rect><path fill="#0A0B0D" d="M169.97 747.52H391.9C494.01 747.52 554.39 691.25 554.39 614.11C554.39 547.72 508.24 502.2 447.54 499.99V499.35C502.23 488.92 538.59 448.77 538.59 394.08C538.59 325.48 481.68 276.48 374.2 276.48H169.97ZM297.69 648.89V555.94H367.24C399.17 555.94 419.72 574.28 419.72 602.41C419.72 630.55 399.17 648.89 367.24 648.89ZM297.69 463V375.11H359.34C388.42 375.11 407.08 392.5 407.08 419.06C407.08 445.61 388.42 463 359.34 463Z"></path><path fill="#0A0B0D" d="M687.64 797.14H736.35V751.84C811.69 744.33 854.03 705.18 854.03 641.45C854.03 587.28 821.02 557.23 743.18 542.89L736.35 541.53V482.57C750 488.72 758.43 500.33 760.02 515.81H846.97C844.92 452.76 804.41 412.7 736.35 404.5V358.75H687.64V403.82C616.85 410.87 570.19 452.53 570.19 511.25C570.19 561.56 605.7 596.38 671.25 608.9L687.64 612.09V675.37C666.92 669.68 654.41 655.34 653.27 634.62H563.81C563.81 704.73 607.52 745.93 687.64 752.07ZM736.35 674.68V623.47C752.74 629.61 760.48 637.58 760.48 648.51C760.48 660.57 751.37 669.9 736.35 674.68ZM687.64 530.83C672.39 525.14 665.33 517.63 665.33 506.7C665.33 495.09 673.98 485.99 687.64 481.21Z"></path></svg>
-<span style="font-size: 16px; font-weight: 900; letter-spacing: -0.02em">bainas<span style="color: #f0b90b">$</span></span>
-</div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 6px">
-<div style="font-size: 30px; font-weight: 800">$ 1,00</div>
-<div style="font-size: 13px; color: #9aa1ab">= <span style="color: #eceef1; font-weight: 700">419,99 Bs</span> a tasa BCV</div>
-</div>
-<div style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #9aa1ab">TASAS</div>
-<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 10px; font-weight: 700; color: #9aa1ab">BCV DÓLAR</span><span style="font-size: 18px; font-weight: 800">419,99 <span style="font-size: 11px; color: #f0b90b">Bs</span></span></div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 10px; font-weight: 700; color: #9aa1ab">BCV EURO</span><span style="font-size: 18px; font-weight: 800">495,61 <span style="font-size: 11px; color: #f0b90b">Bs</span></span></div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 10px; font-weight: 700; color: #9aa1ab">USDT P2P</span><span style="font-size: 18px; font-weight: 800">604,78 <span style="font-size: 11px; color: #f0b90b">Bs</span></span></div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 10px; font-weight: 700; color: #9aa1ab">BRECHA</span><span style="font-size: 18px; font-weight: 800">44,00 <span style="font-size: 11px; color: #f0b90b">%</span></span></div>
-</div>
-<div style="margin-top: auto; align-self: flex-end; width: 56px; height: 56px; border-radius: 999px; background: #f0b90b; display: flex; align-items: center; justify-content: center">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a0b0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v4"></path></svg>
-</div>
-</div>
-</div>
-</div>
+        <div class="stage rise">
+            <div class="phone">
+                <div class="bob bob-a"><span class="dot"></span><span><small>BCV hoy</small><br><span data-bob="bcv">419,99 Bs</span></span></div>
+                <div class="bob bob-b"><span class="accent">₮</span><span><small>USDT P2P</small><br><span data-bob="usdt">604,78 Bs</span></span></div>
+                <div class="screen" id="mini" aria-label="Demo interactiva de Bainas">
+                    <div class="app-head">
+                        <span class="brand"><svg width="28" height="28" aria-hidden="true"><use href="#logo"></use></svg><span class="word">bainas<span class="accent">$</span></span></span>
+                        <span class="live"><span class="dot"></span><span id="live-label">EN VIVO</span></span>
+                    </div>
+                    <div class="amount">
+                        <span class="amount-top" id="m-label">DÓLARES · TASA BCV</span>
+                        <span class="amount-val"><span id="m-sym">$</span> <span id="m-amt">1</span><span class="caret"></span></span>
+                        <span class="amount-res">= <b id="m-res">419,99 Bs</b></span>
+                    </div>
+                    <div class="rates">
+                        <button class="rate on" data-cur="usd" type="button"><span>BCV DÓLAR</span><b><span data-rate="usd">419,99</span> <small>Bs</small></b></button>
+                        <button class="rate" data-cur="eur" type="button"><span>BCV EURO</span><b><span data-rate="eur">495,61</span> <small>Bs</small></b></button>
+                        <button class="rate" data-cur="usdt" type="button"><span>USDT P2P</span><b><span data-rate="usdt">604,78</span> <small>Bs</small></b></button>
+                        <button class="rate" type="button" disabled><span>BRECHA</span><b><span data-rate="gap">44,00</span> <small>%</small></b></button>
+                    </div>
+                    <div class="chips">
+                        <button class="chip" type="button" data-q="10">10</button><button class="chip" type="button" data-q="20">20</button><button class="chip" type="button" data-q="50">50</button><button class="chip" type="button" data-q="100">100</button>
+                    </div>
+                    <div class="keys">
+                        <button class="key" type="button" data-k="1">1</button><button class="key" type="button" data-k="2">2</button><button class="key" type="button" data-k="3">3</button>
+                        <button class="key" type="button" data-k="4">4</button><button class="key" type="button" data-k="5">5</button><button class="key" type="button" data-k="6">6</button>
+                        <button class="key" type="button" data-k="7">7</button><button class="key" type="button" data-k="8">8</button><button class="key" type="button" data-k="9">9</button>
+                        <button class="key" type="button" data-k=",">,</button><button class="key" type="button" data-k="0">0</button><button class="key k-del" type="button" data-k="del" aria-label="Borrar">⌫</button>
+                    </div>
+                    <span class="tap" id="tap"></span>
+                </div>
+            </div>
+            <span class="try">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v6"></path><path d="M13 10a2 2 0 0 1 4 0v2a2 2 0 0 1 4 0v3a6 6 0 0 1-6 6h-2a6 6 0 0 1-5-2.7L5 15a2 2 0 0 1 3-2.6L9 13"></path></svg>
+                Pruébala aquí mismo: toca los números y las tasas
+            </span>
+        </div>
+    </div>
 </section>
 
-<section id="por-que" style="background: #111317; border-top: 1px solid #1d2127; border-bottom: 1px solid #1d2127">
-<div style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 80px 16px; display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start">
-<div style="flex: 1 1 320px; min-width: 0">
-<div style="font-size: 14px; font-weight: 700; letter-spacing: 0.12em; color: #f0b90b">¿POR QUÉ BAINAS?</div>
-<h2 style="margin: 12px 0 0; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; font-weight: 900; letter-spacing: -0.03em">Porque en Venezuela todo es una baina.</h2>
-</div>
-<div style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 18px; font-size: 19px; line-height: 1.6; color: #9aa1ab">
-<p style="margin: 0">Y hay una baina que todos preguntamos cada mañana, en la cola, en el grupo de la familia o antes de pagar: <span style="color: #eceef1; font-weight: 700">"¿a cómo está el bainas$ hoy?"</span></p>
-<p style="margin: 0">Bainas te lo responde en un segundo: a cuánto está el dólar del BCV, el euro y el USDT, y qué tanta diferencia hay entre el oficial y el de la calle.</p>
-<p style="margin: 0">¿Y la <span style="color: #f0b90b; font-weight: 700">$</span> del final? Porque al final, la baina siempre es el dólar.</p>
-</div>
-</div>
+<section class="section" id="caracteristicas">
+    <div class="wrap">
+        <div class="sec-head reveal">
+            <span class="eyebrow">Características</span>
+            <h2 class="h2">Todo lo que necesitas, nada de relleno</h2>
+            <p>Lo que de verdad usas cuando vas a pagar, cobrar o cambiar.</p>
+        </div>
+        <div class="bento">
+            <article class="card c-4 c-wide reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg></span>
+                <h3>Todas las tasas, en un vistazo</h3>
+                <p>BCV dólar y euro, USDT P2P con precio real de compra y venta, y la brecha entre el oficial y la calle.</p>
+                <div class="viz ticker">
+                    <div class="tk"><span>BCV DÓLAR</span><b data-rate="usd">419,99</b><div class="bars"><i style="--h:.45"></i><i style="--h:.5"></i><i style="--h:.55"></i><i style="--h:.6"></i><i style="--h:.62"></i><i style="--h:.7"></i><i style="--h:.75"></i></div></div>
+                    <div class="tk"><span>BCV EURO</span><b data-rate="eur">495,61</b><div class="bars"><i style="--h:.5"></i><i style="--h:.48"></i><i style="--h:.6"></i><i style="--h:.66"></i><i style="--h:.7"></i><i style="--h:.78"></i><i style="--h:.85"></i></div></div>
+                    <div class="tk"><span>USDT P2P</span><b data-rate="usdt">604,78</b><div class="bars"><i style="--h:.6"></i><i style="--h:.72"></i><i style="--h:.68"></i><i style="--h:.8"></i><i style="--h:.86"></i><i style="--h:.92"></i><i style="--h:1"></i></div></div>
+                </div>
+            </article>
+            <article class="card c-2 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v4"></path></svg></span>
+                <h3>Calculadora de verdad</h3>
+                <p>Suma, resta y multiplica en bolívares o divisas. Toca una cifra para corregirla sin borrar todo.</p>
+                <div class="viz op"><div class="l1">25 × 419,99 + 150</div><div class="l2">10.649,75 Bs<span class="caret" style="height: 20px"></span></div></div>
+            </article>
+            <article class="card c-2 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 10h18M7 15h4"></path></svg></span>
+                <h3>Pago Móvil con un toque</h3>
+                <p>Guarda tus datos y compártelos junto con el monto, sin escribirlos cada vez.</p>
+                <div class="viz paycard">
+                    <span>Banco: <b>Venezuela</b></span>
+                    <span>Teléfono: <b>0414-•••-••12</b></span>
+                    <span>Monto: <b>10.499,75 Bs</b></span>
+                    <span class="share">Compartir</span>
+                </div>
+            </article>
+            <article class="card c-2 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></span>
+                <h3>Alertas de brecha</h3>
+                <p>Te avisa cuando la diferencia entre el BCV y el mercado pasa tu límite.</p>
+                <div class="viz gauge" id="gauge" style="--p:.44">
+                    <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><circle cx="48" cy="48" r="40" fill="none" stroke="#1d2127" stroke-width="9"></circle><circle class="arc" cx="48" cy="48" r="40" fill="none" stroke="#f0b90b" stroke-width="9" stroke-linecap="round" transform="rotate(-90 48 48)"></circle></svg>
+                    <div><b><span data-rate="gap">44,00</span>%</b><small>Brecha de hoy</small></div>
+                </div>
+            </article>
+            <article class="card c-2 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                <h3>La tasa de mañana</h3>
+                <p>Cuando el BCV publica la del día siguiente, desde las 5 pm la usa sola. Puedes volver a la de hoy.</p>
+                <div class="viz"><div class="switch"><span>Hoy</span><span>Mañana</span></div></div>
+            </article>
+            <article class="card c-3 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg></span>
+                <h3>Historial y Excel</h3>
+                <p>Mira cómo se movió la tasa por días y exporta tus cálculos cuando los necesites.</p>
+                <div class="viz">
+                    <svg class="spark" width="100%" height="70" viewBox="0 0 300 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 60 L30 55 L60 57 L90 48 L120 50 L150 40 L180 42 L210 30 L240 26 L270 18 L300 10 L300 70 L0 70Z" fill="rgba(240,185,11,.08)"></path><path class="ln" d="M0 60 L30 55 L60 57 L90 48 L120 50 L150 40 L180 42 L210 30 L240 26 L270 18 L300 10" fill="none" stroke="#f0b90b" stroke-width="2.5" vector-effect="non-scaling-stroke"></path></svg>
+                    <span class="xls">⬇ Exportar a Excel</span>
+                </div>
+            </article>
+            <article class="card c-3 reveal">
+                <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M11 18h2"></path></svg></span>
+                <h3>Como una app, sin ocupar espacio</h3>
+                <p>Instálala en tu inicio desde el navegador. Si te quedas sin señal, te muestra las últimas tasas guardadas.</p>
+                <div class="viz wifi">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2ebd85" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 14 0M1.5 9.4a15 15 0 0 1 21 0"></path></svg>
+                    <span><b>Funciona hasta sin internet</b>Tus datos se quedan en tu teléfono.</span>
+                </div>
+            </article>
+        </div>
+    </div>
 </section>
 
-<section id="funciones" style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 88px 16px; display: flex; flex-direction: column; gap: 40px">
-<h2 style="margin: 0; font-size: clamp(2rem, 4vw, 3rem); font-weight: 900; letter-spacing: -0.03em">Todo lo que necesitas, nada de relleno</h2>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px">
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px">
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg>
-<h3 style="margin: 0; font-size: 20px; font-weight: 800">Todas las tasas</h3>
-<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #9aa1ab">BCV dólar y euro, USDT P2P de compra y venta, y la brecha entre oficial y mercado.</p>
-</div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px">
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v4"></path></svg>
-<h3 style="margin: 0; font-size: 20px; font-weight: 800">Calculadora a mano</h3>
-<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #9aa1ab">De dólares a bolívares y al revés, con historial y exportación a Excel.</p>
-</div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px">
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 10h18M7 15h4"></path></svg>
-<h3 style="margin: 0; font-size: 20px; font-weight: 800">Pago Móvil en segundos</h3>
-<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #9aa1ab">Guarda tus datos de pago y compártelos con un toque, sin escribirlos cada vez.</p>
-</div>
-<div style="background: #111317; border: 1px solid #1d2127; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px">
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
-<h3 style="margin: 0; font-size: 20px; font-weight: 800">Alertas de brecha</h3>
-<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #9aa1ab">Te avisa cuando la diferencia entre el BCV y el mercado pasa tu límite.</p>
-</div>
-</div>
+<section class="section" id="novedades" style="padding-top: 0">
+    <div class="wrap">
+        <div class="sec-head reveal">
+            <span class="eyebrow">Novedades</span>
+            <h2 class="h2">Lo último que llegó a Bainas</h2>
+            <p>La app se actualiza sola. Esto es lo nuevo de las últimas versiones.</p>
+        </div>
+        <div class="timeline">
+            <article class="rel new reveal">
+                <div class="rel-head"><span class="ver">v3.4</span><h3>Calculadora más cómoda</h3><span class="badge">NUEVO</span><span class="date">21 oct 2026</span></div>
+                <ul>
+                    <li>Toca cualquier cifra de la operación para poner el cursor ahí y corregir sin borrar todo.</li>
+                    <li>Nueva vista en escritorio: todo en un tablero, con ajustes rápidos bajo la calculadora.</li>
+                </ul>
+            </article>
+            <article class="rel reveal">
+                <div class="rel-head"><span class="ver">v3.3</span><h3>Ahora somos Bainas</h3><span class="date">21 oct 2026</span></div>
+                <ul>
+                    <li>Nuevo nombre, nuevo ícono B$ y nueva casa: bainas.app.</li>
+                    <li>Política de privacidad clara: sin cuentas, sin anuncios, sin rastreo.</li>
+                </ul>
+            </article>
+            <article class="rel reveal">
+                <div class="rel-head"><span class="ver">v3.2</span><h3>Precios reales y tasa de mañana</h3><span class="date">20 oct 2026</span></div>
+                <ul>
+                    <li>El USDT usa el precio real de Binance P2P para comprar o para vender.</li>
+                    <li>Desde las 5 pm, la tasa del BCV del día siguiente se usa sola.</li>
+                    <li>La calculadora queda siempre a mano en la barra de abajo.</li>
+                </ul>
+            </article>
+            <article class="rel reveal">
+                <div class="rel-head"><span class="ver">v3.1</span><h3>Perfiles de pago</h3><span class="date">20 oct 2026</span></div>
+                <ul>
+                    <li>Guarda tus datos de Pago Móvil o transferencia y envíalos con un toque.</li>
+                    <li>Elige si vas a vender o comprar USDT para que la cuenta salga exacta.</li>
+                </ul>
+            </article>
+            <div class="soon reveal"><span class="dot"></span><span><b>Lo que viene:</b> Bainas en Google Play.</span></div>
+        </div>
+    </div>
 </section>
 
-<section id="descarga" style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 0 16px 88px">
-<div style="background: #f0b90b; color: #0a0b0d; border-radius: 28px; padding: 56px 40px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 28px">
-<div style="flex: 999 1 420px; min-width: 0">
-<h2 style="margin: 0; font-size: clamp(1.9rem, 4vw, 2.8rem); font-weight: 900; letter-spacing: -0.03em; line-height: 1.08">Sin registro, sin cuentas, sin publicidad.</h2>
-<p style="margin: 12px 0 0; font-size: 18px; font-weight: 500">Tus datos se quedan en tu teléfono.</p>
-</div>
-<a href="https://app.bainas.app/" style="background: #0a0b0d; color: #eceef1; font-weight: 800; font-size: 18px; text-decoration: none; padding: 18px 28px; border-radius: 16px">Abrir Bainas</a>
-</div>
+<section class="why" id="por-que">
+    <div class="wrap section">
+        <div class="why-l reveal">
+            <span class="eyebrow">¿Por qué Bainas?</span>
+            <h2 class="h2">Porque en Venezuela todo es una baina.</h2>
+        </div>
+        <div class="why-r reveal">
+            <p>Y hay una baina que todos preguntamos cada mañana, en la cola, en el grupo de la familia o antes de pagar: <strong>"¿a cómo está el bainas$ hoy?"</strong></p>
+            <p>Bainas te lo responde en un segundo: a cuánto está el dólar del BCV, el euro y el USDT, y qué tanta diferencia hay entre el oficial y el de la calle.</p>
+            <p>¿Y la <strong class="accent">$</strong> del final? Porque al final, la baina siempre es el dólar.</p>
+        </div>
+    </div>
 </section>
 
-<footer style="border-top: 1px solid #1d2127; margin-top: auto">
-<div style="width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 32px 16px 40px; display: flex; flex-direction: column; gap: 16px">
-<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between">
-<span style="font-size: 18px; font-weight: 900; letter-spacing: -0.02em">bainas<span style="color: #f0b90b">$</span> <span style="font-weight: 500; font-size: 14px; color: #9aa1ab">La tasa, sin drama.</span></span>
-<nav style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px">
-<a href="https://bainas.app/privacidad.html" style="color: #9aa1ab">Privacidad</a>
-<a href="mailto:j.e.carrasquel86@gmail.com" style="color: #9aa1ab">Contacto</a>
-</nav>
-</div>
-<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9aa1ab">Bainas es un proyecto independiente y no está afiliado a Binance, al Banco Central de Venezuela ni a ninguna otra institución. Las tasas son referenciales y no constituyen asesoría financiera.</p>
-</div>
+<section class="section" id="descarga">
+    <div class="wrap">
+        <div class="cta reveal">
+            <div style="flex: 999 1 420px; min-width: 0">
+                <h2 class="h2">Sin registro, sin cuentas, sin publicidad.</h2>
+                <p>Tus datos se quedan en tu teléfono.</p>
+            </div>
+            <a class="btn" href="https://app.bainas.app/">Abrir Bainas</a>
+        </div>
+    </div>
+</section>
+</main>
+
+<footer>
+    <div class="wrap">
+        <div class="foot-row">
+            <span class="word" style="font-size: 18px">bainas<span class="accent">$</span> <span style="font-weight: 500; font-size: 14px; color: var(--text-2); letter-spacing: 0">La tasa, sin drama.</span></span>
+            <nav>
+                <a href="/privacidad.html">Privacidad</a>
+                <a href="mailto:j.e.carrasquel86@gmail.com">Contacto</a>
+            </nav>
+        </div>
+        <p class="legal">Bainas es un proyecto independiente y no está afiliado a Binance, al Banco Central de Venezuela ni a ninguna otra institución. Las tasas son referenciales y no constituyen asesoría financiera.</p>
+    </div>
 </footer>
 
-</div>
+<script>
+(() => {
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fmt = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Borde del encabezado al hacer scroll
+    const top = $('#top');
+    addEventListener('scroll', () => top.classList.toggle('scrolled', scrollY > 8), { passive: true });
+
+    // Aparición al hacer scroll
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.15 });
+    $$('.reveal').forEach((el) => io.observe(el));
+
+    // ── Mini app ──
+    const rates = { usd: 419.99, eur: 495.61, usdt: 604.78 };
+    const CUR = {
+        usd: { sym: '$', label: 'DÓLARES · TASA BCV' },
+        eur: { sym: '€', label: 'EUROS · TASA BCV' },
+        usdt: { sym: '₮', label: 'USDT · BINANCE P2P' },
+    };
+    let cur = 'usd';
+    let amt = '1';
+    let shown = rates.usd;
+    let raf = 0;
+
+    const mini = $('#mini');
+    const elAmt = $('#m-amt'), elRes = $('#m-res'), elSym = $('#m-sym'), elLabel = $('#m-label');
+
+    const animateTo = (target) => {
+        cancelAnimationFrame(raf);
+        if (reduced) { shown = target; elRes.textContent = fmt(target) + ' Bs'; return; }
+        const from = shown, t0 = performance.now();
+        const step = (t) => {
+            const k = Math.min(1, (t - t0) / 450);
+            shown = from + (target - from) * (1 - Math.pow(1 - k, 3));
+            elRes.textContent = fmt(shown) + ' Bs';
+            if (k < 1) raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+    };
+
+    const render = () => {
+        const [ent, dec] = amt.split(',');
+        elAmt.textContent = Number(ent || 0).toLocaleString('es-VE') + (dec !== undefined ? ',' + dec : '');
+        elSym.textContent = CUR[cur].sym;
+        elLabel.textContent = CUR[cur].label;
+        $$('.rate[data-cur]', mini).forEach((b) => b.classList.toggle('on', b.dataset.cur === cur));
+        animateTo(parseFloat(amt.replace(',', '.') || '0') * rates[cur]);
+    };
+
+    const press = (k) => {
+        if (k === 'del') amt = amt.length > 1 ? amt.slice(0, -1) : '0';
+        else if (k === ',') { if (!amt.includes(',')) amt += ','; }
+        else {
+            const dec = amt.split(',')[1];
+            if (dec !== undefined && dec.length >= 2) return;
+            if (amt.replace(',', '').length >= 7) return;
+            amt = amt === '0' ? k : amt + k;
+        }
+        render();
+    };
+
+    const showRates = () => {
+        rates.gap = (rates.usdt / rates.usd - 1) * 100;
+        $$('[data-rate]').forEach((el) => { el.textContent = fmt(rates[el.dataset.rate]); });
+        $('[data-bob="bcv"]').textContent = fmt(rates.usd) + ' Bs';
+        $('[data-bob="usdt"]').textContent = fmt(rates.usdt) + ' Bs';
+        $('#gauge').style.setProperty('--p', Math.min(1, rates.gap / 100).toFixed(3));
+        render();
+    };
+
+    // Tasas reales del día (las mismas fuentes que usa la app). Si fallan, quedan las de ejemplo.
+    Promise.all(['dolares', 'euros'].map((p) => fetch('https://ve.dolarapi.com/v1/' + p).then((r) => r.json())))
+        .then(([usd, eur]) => {
+            const of = (arr, f) => (Array.isArray(arr) ? arr.find((i) => i.fuente === f) : arr)?.promedio;
+            const bcv = of(usd, 'oficial'), par = of(usd, 'paralelo'), euro = of(eur, 'oficial');
+            if (bcv > 0 && par > 0 && euro > 0) { Object.assign(rates, { usd: bcv, eur: euro, usdt: par }); showRates(); }
+        })
+        .catch(() => { $('#live-label').textContent = 'DEMO'; });
+    showRates();
+
+    // ── Demo que se usa sola hasta que la persona toque ──
+    const tapEl = $('#tap');
+    const keyEl = (k) => $(`.key[data-k="${k}"]`, mini);
+    const tapOn = (el) => {
+        const a = el.getBoundingClientRect(), s = mini.getBoundingClientRect();
+        tapEl.style.left = (a.left - s.left + a.width / 2) + 'px';
+        tapEl.style.top = (a.top - s.top + a.height / 2) + 'px';
+        tapEl.classList.remove('go'); void tapEl.offsetWidth; tapEl.classList.add('go');
+        el.classList.add('press'); setTimeout(() => el.classList.remove('press'), 160);
+    };
+    const script = [
+        ['q', '100'], ['wait'], ['wait'],
+        ['cur', 'eur'], ['wait'], ['wait'], ['cur', 'usdt'], ['wait'], ['wait'],
+        ['del'], ['del'], ['del'], ['k', '2'], ['k', '5'], ['wait'], ['wait'],
+        ['cur', 'usd'], ['wait'], ['wait'], ['q', '20'], ['wait'], ['k', '0'], ['wait'], ['wait'], ['wait'],
+    ];
+    let i = 0, timer = 0, idleUntil = 0, visible = true;
+    const tick = () => {
+        timer = setTimeout(tick, 650);
+        if (!visible || document.hidden || Date.now() < idleUntil) return;
+        const [type, v] = script[i];
+        i = (i + 1) % script.length;
+        if (type === 'k' || type === 'del') { const el = keyEl(type === 'del' ? 'del' : v); tapOn(el); press(type === 'del' ? 'del' : v); }
+        else if (type === 'q') { tapOn($(`.chip[data-q="${v}"]`, mini)); amt = v; render(); }
+        else if (type === 'cur') { const el = $(`.rate[data-cur="${v}"]`, mini); tapOn(el); cur = v; render(); }
+    };
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(mini);
+    if (!reduced) timer = setTimeout(tick, 1600);
+
+    // La persona toma el control: la demo se pausa mientras use la mini app.
+    mini.addEventListener('pointerdown', () => { idleUntil = Date.now() + 15000; i = 0; });
+    $$('.key', mini).forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
+    $$('.rate[data-cur]', mini).forEach((b) => b.addEventListener('click', () => { cur = b.dataset.cur; render(); }));
+    $$('.chip', mini).forEach((b) => b.addEventListener('click', () => { amt = b.dataset.q; render(); }));
+})();
+</script>
 </body>
 </html>
