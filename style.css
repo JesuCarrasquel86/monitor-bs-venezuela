@@ -647,6 +647,27 @@ svg.lucide {
     transform: scale(0.98);
 }
 
+/* Enlace de referido para quien aún no tiene cuenta en Binance */
+.binance-signup {
+    display: block;
+    margin-top: 10px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-2);
+    text-decoration: none;
+}
+
+.binance-signup b {
+    display: block;
+    margin-top: 2px;
+    color: var(--accent-ink);
+    font-weight: 700;
+}
+
+.binance-signup:hover b {
+    text-decoration: underline;
+}
+
 /* =============================================
    TASAS
    ============================================= */

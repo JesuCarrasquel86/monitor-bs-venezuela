@@ -198,7 +198,6 @@
         .tap { position: absolute; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; background: rgba(240, 185, 11, .35); border: 2px solid rgba(240, 185, 11, .8); pointer-events: none; opacity: 0; transform: scale(.4); z-index: 5; }
         .tap.go { animation: tap .5s ease-out; }
         @keyframes tap { 0% { opacity: 1; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.3); } }
-        .try { font-size: 14px; color: var(--text-2); display: inline-flex; align-items: center; gap: 8px; }
         .bob { position: absolute; z-index: 2; background: rgba(17, 19, 23, .9); border: 1px solid var(--line-2); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 700; display: none; align-items: center; gap: 8px; box-shadow: 0 12px 30px -12px #000; animation: bob 5s ease-in-out infinite; }
         .bob small { color: var(--text-2); font-weight: 600; font-size: 11px; }
         .bob-a { left: -110px; top: 170px; }
@@ -275,6 +274,15 @@
 
         .wifi { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; font-size: 14px; color: var(--text-2); }
         .wifi b { color: var(--text); display: block; }
+
+        /* Enlace de referido de Binance */
+        .refer { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 20px 24px; border-radius: 22px; background: linear-gradient(100deg, #f0b90b 0%, #f0b90b 35%, #f8cf4a 50%, #f0b90b 65%, #f0b90b 100%); background-size: 250% 100%; animation: shine 7s linear infinite; color: var(--bg); text-decoration: none; transition: transform .3s; }
+        .refer:hover { color: var(--bg); }
+        .js .refer.reveal.in:hover { transform: translateY(-3px); }
+        .refer-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--bg); color: var(--accent); font-weight: 900; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+        .refer-txt { flex: 1 1 260px; min-width: 0; font-size: 16px; line-height: 1.5; color: rgba(10, 11, 13, .78); font-weight: 500; }
+        .refer-txt b { color: var(--bg); font-weight: 800; }
+        .refer-go { flex: none; font-weight: 800; color: var(--text); background: var(--bg); padding: 12px 18px; border-radius: 12px; white-space: nowrap; }
 
         /* ── ¿Por qué? ── */
         .why { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -393,10 +401,6 @@
                     <span class="tap" id="tap" aria-hidden="true"></span>
                 </div>
             </div>
-            <span class="try">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v6"></path><path d="M13 10a2 2 0 0 1 4 0v2a2 2 0 0 1 4 0v3a6 6 0 0 1-6 6h-2a6 6 0 0 1-5-2.7L5 15a2 2 0 0 1 3-2.6L9 13"></path></svg>
-                Pruébala aquí mismo: toca los números y las tasas
-            </span>
         </div>
     </div>
 </section>
@@ -462,7 +466,7 @@
             <article class="card c-2 reveal">
                 <span class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f0b90b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
                 <h3>La tasa de mañana</h3>
-                <p>Cuando el BCV publica la del día siguiente, desde las 5 pm la usa sola. Puedes volver a la de hoy.</p>
+                <p>Cuando el BCV publica la tasa del día siguiente, se coloca automáticamente. Tú decides si prefieres usar la de hoy.</p>
                 <div class="viz"><div class="switch"><span>Hoy</span><span>Mañana</span></div></div>
             </article>
             <article class="card c-3 reveal">
@@ -484,6 +488,11 @@
                 </div>
             </article>
         </div>
+        <a class="refer reveal" href="https://www.binance.com/register?ref=BAINAS" target="_blank" rel="noopener sponsored">
+            <span class="refer-ico" aria-hidden="true">₮</span>
+            <span class="refer-txt"><b>¿Aún no tienes Binance?</b> Crea tu cuenta gratis con descuento en comisiones y compra o vende USDT por P2P.</span>
+            <span class="refer-go">Crear cuenta <span aria-hidden="true">→</span></span>
+        </a>
     </div>
 </section>
 
@@ -498,30 +507,30 @@
             <article class="rel new reveal">
                 <div class="rel-head"><span class="ver">v3.4</span><h3>Calculadora más cómoda</h3><span class="badge">NUEVO</span><span class="date">21 oct 2026</span></div>
                 <ul>
-                    <li>Toca cualquier cifra de la operación para poner el cursor ahí y corregir sin borrar todo.</li>
-                    <li>Nueva vista en escritorio: todo en un tablero, con ajustes rápidos bajo la calculadora.</li>
+                    <li>¿Te equivocaste en un número? Tócalo y corrígelo, sin borrar toda la operación.</li>
+                    <li>En la computadora, ahora ves todo en un solo tablero, con ajustes rápidos al lado de la calculadora.</li>
                 </ul>
             </article>
             <article class="rel reveal">
                 <div class="rel-head"><span class="ver">v3.3</span><h3>Ahora somos Bainas</h3><span class="date">21 oct 2026</span></div>
                 <ul>
                     <li>Nuevo nombre, nuevo ícono B$ y nueva casa: bainas.app.</li>
-                    <li>Política de privacidad clara: sin cuentas, sin anuncios, sin rastreo.</li>
+                    <li>Privacidad clara: sin cuentas, sin anuncios y sin rastreo.</li>
                 </ul>
             </article>
             <article class="rel reveal">
                 <div class="rel-head"><span class="ver">v3.2</span><h3>Precios reales y tasa de mañana</h3><span class="date">20 oct 2026</span></div>
                 <ul>
-                    <li>El USDT usa el precio real de Binance P2P para comprar o para vender.</li>
-                    <li>Desde las 5 pm, la tasa del BCV del día siguiente se usa sola.</li>
-                    <li>La calculadora queda siempre a mano en la barra de abajo.</li>
+                    <li>El USDT ahora muestra el precio real de Binance P2P, según vayas a comprar o a vender.</li>
+                    <li>La tasa del BCV de mañana se coloca sola apenas la publican, y tú decides si prefieres la de hoy.</li>
+                    <li>La calculadora siempre está a un toque, en la barra de abajo.</li>
                 </ul>
             </article>
             <article class="rel reveal">
                 <div class="rel-head"><span class="ver">v3.1</span><h3>Perfiles de pago</h3><span class="date">20 oct 2026</span></div>
                 <ul>
                     <li>Guarda tus datos de Pago Móvil o transferencia y envíalos con un toque.</li>
-                    <li>Elige si vas a vender o comprar USDT para que la cuenta salga exacta.</li>
+                    <li>Elige si vas a comprar o a vender USDT y la cuenta te sale exacta.</li>
                 </ul>
             </article>
             <div class="soon reveal"><span class="dot"></span><span><b>Lo que viene:</b> Bainas en Google Play.</span></div>
