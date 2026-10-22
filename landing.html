@@ -96,12 +96,14 @@
         .fine { font-size: 14px; color: var(--text-2); }
 
         /* Entrada escalonada del hero */
-        .js .rise { opacity: 0; transform: translateY(18px); animation: rise .7s cubic-bezier(.2, .7, .2, 1) forwards; }
-        .js .rise:nth-child(2) { animation-delay: .08s; }
-        .js .rise:nth-child(3) { animation-delay: .16s; }
-        .js .rise:nth-child(4) { animation-delay: .24s; }
-        .js .rise:nth-child(5) { animation-delay: .32s; }
-        @keyframes rise { to { opacity: 1; transform: none; } }
+        .js .rise { opacity: 0; animation: rise .5s cubic-bezier(.34, 1.56, .64, 1) forwards; }
+        .js .rise:nth-child(2) { animation-delay: .06s; }
+        .js .rise:nth-child(3) { animation-delay: .12s; }
+        .js .rise:nth-child(4) { animation-delay: .18s; }
+        .js .rise:nth-child(5) { animation-delay: .24s; }
+        .js .stage.rise { animation-name: pop; animation-delay: .15s; }
+        @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
+        @keyframes pop { from { opacity: 0; transform: translateY(24px) scale(.9) rotate(3deg); } to { opacity: 1; transform: none; } }
 
         /* ── Mini app del teléfono ── */
         .stage { flex: 1 1 320px; display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; }
@@ -151,7 +153,11 @@
         .sec-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; max-width: 680px; }
         .sec-head p { font-size: 18px; line-height: 1.55; color: var(--text-2); }
 
-        .js .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s cubic-bezier(.2, .7, .2, 1), transform .7s cubic-bezier(.2, .7, .2, 1); }
+        /* Entradas cortas con rebote; el retraso escalonado lo pone el script */
+        .js .reveal { opacity: 0; transform: translateY(20px) scale(.96); transition: opacity .35s ease-out, transform .5s cubic-bezier(.34, 1.56, .64, 1); }
+        .js .card.reveal { transform: translateY(24px) scale(.94) rotate(-1.5deg); }
+        .js .card.reveal:nth-child(even) { transform: translateY(24px) scale(.94) rotate(1.5deg); }
+        .js .rel.reveal, .js .soon.reveal { transform: translateX(-28px); }
         .js .reveal.in { opacity: 1; transform: none; }
 
         /* ── Características (bento) ── */
@@ -215,7 +221,7 @@
         .why-l { flex: 1 1 320px; min-width: 0; }
         .why-l .h2 { margin-top: 12px; }
         .why-r { flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 18px; font-size: 19px; line-height: 1.6; color: var(--text-2); }
-        .why-r strong { color: var(--text); }
+        .why-r strong { color: var(--accent); }
 
         /* ── Novedades ── */
         .timeline { position: relative; display: flex; flex-direction: column; gap: 18px; padding-left: 28px; }
@@ -501,7 +507,12 @@
 
     // Aparición al hacer scroll
     const io = new IntersectionObserver((entries) => {
-        entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+        entries.filter((e) => e.isIntersecting).forEach((e, n) => {
+            e.target.style.transitionDelay = Math.min(n * 70, 280) + 'ms';
+            e.target.classList.add('in');
+            setTimeout(() => { e.target.style.transitionDelay = ''; }, 900);
+            io.unobserve(e.target);
+        });
     }, { threshold: 0.15 });
     $$('.reveal').forEach((el) => io.observe(el));
 
