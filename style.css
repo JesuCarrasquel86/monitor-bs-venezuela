@@ -658,6 +658,8 @@ svg.lucide {
 }
 
 .binance-signup b {
+    display: block;
+    margin-top: 2px;
     color: var(--accent-ink);
     font-weight: 700;
 }

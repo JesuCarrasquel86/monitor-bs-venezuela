@@ -276,13 +276,13 @@
         .wifi b { color: var(--text); display: block; }
 
         /* Enlace de referido de Binance */
-        .refer { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 18px 22px; border-radius: 22px; border: 1px solid rgba(240, 185, 11, .35); background: var(--accent-soft); color: var(--text); text-decoration: none; transition: border-color .3s, transform .3s; }
-        .refer:hover { color: var(--text); border-color: var(--accent); }
+        .refer { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 20px 24px; border-radius: 22px; background: linear-gradient(100deg, #f0b90b 0%, #f0b90b 35%, #f8cf4a 50%, #f0b90b 65%, #f0b90b 100%); background-size: 250% 100%; animation: shine 7s linear infinite; color: var(--bg); text-decoration: none; transition: transform .3s; }
+        .refer:hover { color: var(--bg); }
         .js .refer.reveal.in:hover { transform: translateY(-3px); }
-        .refer-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--accent); color: var(--bg); font-weight: 900; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
-        .refer-txt { flex: 1 1 260px; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--text-2); }
-        .refer-txt b { color: var(--text); }
-        .refer-go { flex: none; font-weight: 800; color: var(--accent); white-space: nowrap; }
+        .refer-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--bg); color: var(--accent); font-weight: 900; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+        .refer-txt { flex: 1 1 260px; min-width: 0; font-size: 16px; line-height: 1.5; color: rgba(10, 11, 13, .78); font-weight: 500; }
+        .refer-txt b { color: var(--bg); font-weight: 800; }
+        .refer-go { flex: none; font-weight: 800; color: var(--text); background: var(--bg); padding: 12px 18px; border-radius: 12px; white-space: nowrap; }
 
         /* ── ¿Por qué? ── */
         .why { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
