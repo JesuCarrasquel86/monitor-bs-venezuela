@@ -276,6 +276,15 @@
         .wifi { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; font-size: 14px; color: var(--text-2); }
         .wifi b { color: var(--text); display: block; }
 
+        /* Enlace de referido de Binance */
+        .refer { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 18px 22px; border-radius: 22px; border: 1px solid rgba(240, 185, 11, .35); background: var(--accent-soft); color: var(--text); text-decoration: none; transition: border-color .3s, transform .3s; }
+        .refer:hover { color: var(--text); border-color: var(--accent); }
+        .js .refer.reveal.in:hover { transform: translateY(-3px); }
+        .refer-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--accent); color: var(--bg); font-weight: 900; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+        .refer-txt { flex: 1 1 260px; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--text-2); }
+        .refer-txt b { color: var(--text); }
+        .refer-go { flex: none; font-weight: 800; color: var(--accent); white-space: nowrap; }
+
         /* ── ¿Por qué? ── */
         .why { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
         .why .wrap { display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start; }
@@ -484,6 +493,11 @@
                 </div>
             </article>
         </div>
+        <a class="refer reveal" href="https://www.binance.com/register?ref=BAINAS" target="_blank" rel="noopener sponsored">
+            <span class="refer-ico" aria-hidden="true">₮</span>
+            <span class="refer-txt"><b>¿Aún no tienes Binance?</b> Crea tu cuenta gratis con descuento en comisiones y compra o vende USDT por P2P.</span>
+            <span class="refer-go">Crear cuenta <span aria-hidden="true">→</span></span>
+        </a>
     </div>
 </section>
 
