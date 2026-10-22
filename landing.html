@@ -158,7 +158,8 @@
         .js .card.reveal { transform: translateY(24px) scale(.94) rotate(-1.5deg); }
         .js .card.reveal:nth-child(even) { transform: translateY(24px) scale(.94) rotate(1.5deg); }
         .js .rel.reveal, .js .soon.reveal { transform: translateX(-28px); }
-        .js .reveal.in { opacity: 1; transform: none; }
+        .js .reveal.in, .js .reveal.in:nth-child(n) { opacity: 1; transform: none; }
+        .js .card.reveal.in:hover { transform: translateY(-3px); }
 
         /* ── Características (bento) ── */
         .bento { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
