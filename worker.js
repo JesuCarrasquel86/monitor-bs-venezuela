@@ -21,6 +21,15 @@ export default {
             return env.ASSETS.fetch(new Request(new URL('/landing', url), request));
         }
 
-        return env.ASSETS.fetch(request);
+        const res = await env.ASSETS.fetch(request);
+
+        // Los enlaces *.workers.dev siguen funcionando, pero no deben salir en
+        // Google como copia de app.bainas.app.
+        if (url.hostname.endsWith('.workers.dev')) {
+            const out = new Response(res.body, res);
+            out.headers.set('X-Robots-Tag', 'noindex');
+            return out;
+        }
+        return res;
     },
 };

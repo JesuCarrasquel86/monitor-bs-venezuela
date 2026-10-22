@@ -3,16 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Bainas · ¿A cómo está el bainas$ hoy?</title>
-    <meta name="description" content="La tasa del BCV, el euro y el USDT en un vistazo, con calculadora en bolívares. Gratis, sin registro y sin publicidad.">
+    <title>Bainas · Tasa BCV, dólar, euro y USDT hoy en Venezuela</title>
+    <meta name="description" content="¿A cómo está el dólar hoy? Consulta la tasa BCV, el euro y el USDT de Binance P2P en Venezuela, con calculadora en bolívares. Gratis, sin registro y sin anuncios.">
+    <link rel="canonical" href="https://bainas.app/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#0a0b0d">
+    <meta name="application-name" content="Bainas">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+    <!-- Vista previa al compartir el enlace (WhatsApp, Telegram, X, Facebook) -->
     <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Bainas">
+    <meta property="og:locale" content="es_VE">
     <meta property="og:url" content="https://bainas.app/">
-    <meta property="og:title" content="Bainas · ¿A cómo está el bainas$ hoy?">
-    <meta property="og:description" content="La tasa del BCV, el euro y el USDT en un vistazo. La tasa, sin drama.">
-    <meta property="og:image" content="https://bainas.app/icons/icon-512.png">
+    <meta property="og:title" content="¿A cómo está el bainas$ hoy? · Bainas">
+    <meta property="og:description" content="Tasa BCV, euro y USDT P2P al instante, con calculadora en bolívares. Gratis, sin registro y sin anuncios.">
+    <meta property="og:image" content="https://bainas.app/og-image.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Bainas: ¿a cómo está el bainas$ hoy? Tasa BCV, euro y USDT al instante.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="¿A cómo está el bainas$ hoy? · Bainas">
+    <meta name="twitter:description" content="Tasa BCV, euro y USDT P2P al instante, con calculadora en bolívares.">
+    <meta name="twitter:image" content="https://bainas.app/og-image.jpg">
+    <meta name="twitter:image:alt" content="Bainas: ¿a cómo está el bainas$ hoy? Tasa BCV, euro y USDT al instante.">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://bainas.app/#org",
+          "name": "Bainas",
+          "url": "https://bainas.app/",
+          "logo": "https://bainas.app/icons/icon-512.png",
+          "email": "j.e.carrasquel86@gmail.com"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://bainas.app/#web",
+          "name": "Bainas",
+          "alternateName": "bainas$",
+          "url": "https://bainas.app/",
+          "inLanguage": "es-VE",
+          "publisher": {
+            "@id": "https://bainas.app/#org"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Bainas",
+          "url": "https://app.bainas.app/",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "Web, Android, iOS",
+          "browserRequirements": "Requiere JavaScript",
+          "inLanguage": "es-VE",
+          "description": "Monitor de la tasa BCV, el euro y el USDT de Binance P2P en Venezuela, con calculadora en bolívares.",
+          "image": "https://bainas.app/og-image.jpg",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "publisher": {
+            "@id": "https://bainas.app/#org"
+          }
+        }
+      ]
+    }
+    </script>
     <script>
         // Quien instaló la app cuando vivía en bainas.app abre esta página como app:
         // se le manda a la app, que ahora vive en app.bainas.app.
@@ -272,7 +332,7 @@
 <header class="top" id="top">
     <div class="wrap">
         <a href="#inicio" class="brand"><svg width="38" height="38" aria-hidden="true"><use href="#logo"></use></svg><span class="word">bainas<span class="accent">$</span></span></a>
-        <nav>
+        <nav aria-label="Principal">
             <a class="link" href="#por-que">¿Por qué Bainas?</a>
             <a class="link" href="#caracteristicas">Características</a>
             <a class="link" href="#novedades">Novedades</a>
@@ -303,9 +363,9 @@
 
         <div class="stage rise">
             <div class="phone">
-                <div class="bob bob-a"><span class="dot"></span><span><small>BCV hoy</small><br><span data-bob="bcv">419,99 Bs</span></span></div>
-                <div class="bob bob-b"><span class="accent">₮</span><span><small>USDT P2P</small><br><span data-bob="usdt">604,78 Bs</span></span></div>
-                <div class="screen" id="mini" aria-label="Demo interactiva de Bainas">
+                <div class="bob bob-a" aria-hidden="true"><span class="dot"></span><span><small>BCV hoy</small><br><span data-bob="bcv">419,99 Bs</span></span></div>
+                <div class="bob bob-b" aria-hidden="true"><span class="accent">₮</span><span><small>USDT P2P</small><br><span data-bob="usdt">604,78 Bs</span></span></div>
+                <div class="screen" id="mini" role="group" aria-label="Demo interactiva de Bainas">
                     <div class="app-head">
                         <span class="brand"><svg width="28" height="28" aria-hidden="true"><use href="#logo"></use></svg><span class="word">bainas<span class="accent">$</span></span></span>
                         <span class="live"><span class="dot"></span><span id="live-label">EN VIVO</span></span>
@@ -330,7 +390,7 @@
                         <button class="key" type="button" data-k="7">7</button><button class="key" type="button" data-k="8">8</button><button class="key" type="button" data-k="9">9</button>
                         <button class="key" type="button" data-k=",">,</button><button class="key" type="button" data-k="0">0</button><button class="key k-del" type="button" data-k="del" aria-label="Borrar">⌫</button>
                     </div>
-                    <span class="tap" id="tap"></span>
+                    <span class="tap" id="tap" aria-hidden="true"></span>
                 </div>
             </div>
             <span class="try">
@@ -486,8 +546,8 @@
     <div class="wrap">
         <div class="foot-row">
             <span class="word" style="font-size: 18px">bainas<span class="accent">$</span> <span style="font-weight: 500; font-size: 14px; color: var(--text-2); letter-spacing: 0">La tasa, sin drama.</span></span>
-            <nav>
-                <a href="/privacidad.html">Privacidad</a>
+            <nav aria-label="Legal">
+                <a href="/privacidad">Privacidad</a>
                 <a href="mailto:j.e.carrasquel86@gmail.com">Contacto</a>
             </nav>
         </div>
