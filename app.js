@@ -28,6 +28,7 @@ const KEYS = {
     whatsNew: 'monitor-dolar-whats-new-seen',
     dayChoice: 'monitor-dolar-day-choice',
     autoNext: 'monitor-dolar-auto-next',
+    movedBanner: 'monitor-dolar-moved-banner-closed',
 };
 
 // localStorage puede fallar (modo privado, cuota llena): nunca debe romper la app
@@ -1915,7 +1916,10 @@ const sanitizeProfile = (p) => {
     return out;
 };
 
-const saveProfiles = () => store.setJSON(KEYS.profiles, payProfiles);
+const saveProfiles = () => {
+    store.setJSON(KEYS.profiles, payProfiles);
+    updateMovedBanner(); // con un perfil guardado, el aviso de mudanza ya no hace falta
+};
 
 const getProfile = (id) => payProfiles.list.find((p) => p.id === id) || null;
 
@@ -2663,6 +2667,8 @@ const maybeShowIntro = (isFirstVisit) => {
     if (introChecked) return;
     introChecked = true;
     if (topOverlay()) return;
+    // En la dirección vieja, lo importante es avisar de la mudanza
+    if (isOldHost()) { showMovedNotice(); return; }
     if (!store.get(KEYS.onboarding)) {
         if (isFirstVisit) setTimeout(() => startTour(), 600);
         else showWhatsNew();
@@ -2912,6 +2918,46 @@ const setupInstall = () => {
     });
 };
 
+// ══════════════════════════════════════════════════════════════
+//  MUDANZA A app.bainas.app
+// ══════════════════════════════════════════════════════════════
+// Los datos (perfiles, historial, ajustes) se guardan por dirección, así que no
+// pasan solos de la dirección vieja a la nueva. En la vieja se avisa y se ofrece
+// copiar los perfiles; en la nueva, una tarjeta para quien ya usaba la app.
+const isOldHost = () => /\.workers\.dev$/.test(window.location.hostname);
+const MOVED_BANNER_UNTIL = '2027-01-31'; // después de esta fecha ya no se muestra
+
+const updateMovedBanner = () => {
+    const show = !isOldHost()
+        && !store.get(KEYS.movedBanner)
+        && !payProfiles.list.length
+        && toDateKey(new Date()) <= MOVED_BANNER_UNTIL;
+    $('moved-banner')?.classList.toggle('hidden', !show);
+};
+
+const showMovedNotice = () => {
+    const n = payProfiles.list.length;
+    setText('moved-profiles-text', n
+        ? `Tus perfiles de pago se guardan en cada dirección por separado, así que no se pasan solos. Tienes ${n} ${n === 1 ? 'perfil guardado' : 'perfiles guardados'} aquí: ${n === 1 ? 'cópialo' : 'cópialos'} antes de ir para tenerlos a mano al agregarlos de nuevo.`
+        : 'Tus ajustes, el historial y los perfiles de pago se guardan en cada dirección por separado, así que en la nueva empezarás desde cero.');
+    $('moved-copy-profiles')?.classList.toggle('hidden', !n);
+    openOverlay('moved-notice');
+};
+
+const setupMoved = () => {
+    updateMovedBanner();
+    $('moved-banner-close')?.addEventListener('click', () => {
+        store.set(KEYS.movedBanner, '1');
+        hideAnimated($('moved-banner'));
+    });
+    $('moved-copy-profiles')?.addEventListener('click', () => {
+        const text = payProfiles.list
+            .map((p) => [p.name, ...profileLines(p)].filter(Boolean).join('\n'))
+            .join('\n\n');
+        copyText(text, 'Datos de pago copiados');
+    });
+};
+
 const registerServiceWorker = async () => {
     if (!('serviceWorker' in navigator)) return;
     try {
@@ -2972,6 +3018,7 @@ const init = () => {
     setupSettings();
     setupWhatsNew();
     setupInstall();
+    setupMoved();
     setupDesktopLayout();
     setupGlobalListeners();
     updateOnlineStatus();

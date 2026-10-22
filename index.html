@@ -27,7 +27,7 @@
         } catch (e) { }
     </script>
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=3.4.3">
+    <link rel="stylesheet" href="style.css?v=3.4.4">
 </head>
 
 <body>
@@ -63,6 +63,21 @@
                 </button>
             </div>
         </header>
+
+        <!-- ── Aviso de mudanza para quien ya usaba la app en otra dirección ── -->
+        <section class="moved-banner hidden" id="moved-banner" role="status">
+            <span class="sheet-icon"><i data-lucide="truck" class="ic"></i></span>
+            <div class="moved-banner-text">
+                <p class="moved-banner-title">Nos mudamos a app.bainas.app</p>
+                <p>Si ya usabas Bainas en la dirección anterior, tus perfiles de pago no se pasaron solos: agrégalos de nuevo. Si la tenías instalada, instálala otra vez desde aquí.</p>
+                <button class="chip-btn" type="button" data-opens="profiles-sheet">
+                    <i data-lucide="wallet-cards" class="ic-xs"></i>Agregar perfil de pago
+                </button>
+            </div>
+            <button id="moved-banner-close" class="icon-btn" type="button" aria-label="Cerrar aviso">
+                <i data-lucide="x" class="ic-sm"></i>
+            </button>
+        </section>
 
         <main class="app-main">
 
@@ -652,7 +667,34 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.4.3"></script>
+    <!-- ══════════════ Mudanza (solo en la dirección vieja) ══════════════ -->
+    <div id="moved-notice" class="modal-overlay hidden" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="moved-title">
+            <div class="modal-header">
+                <span class="sheet-icon"><i data-lucide="truck" class="ic"></i></span>
+                <div>
+                    <h3 id="moved-title">Bainas se mudó</h3>
+                    <p class="modal-kicker">Nueva dirección: app.bainas.app</p>
+                </div>
+                <button class="icon-btn sheet-close" type="button" data-close aria-label="Cerrar">
+                    <i data-lucide="x" class="ic"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="moved-text">La app ahora vive en <strong>app.bainas.app</strong>. Ábrela desde ahí y, si la tenías instalada, vuelve a instalarla desde la nueva dirección.</p>
+                <p class="moved-text moved-warn" id="moved-profiles-text"></p>
+                <button id="moved-copy-profiles" class="btn-ghost hidden" type="button">
+                    <i data-lucide="copy" class="ic-sm"></i>Copiar mis datos de pago
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-ghost" type="button" data-close>Seguir aquí</button>
+                <a class="btn-primary" href="https://app.bainas.app/">Ir a la nueva</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=3.4.4"></script>
 </body>
 
 </html>

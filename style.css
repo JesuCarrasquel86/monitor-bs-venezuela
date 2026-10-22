@@ -2871,3 +2871,63 @@ a.settings-row-btn {
 @media (prefers-reduced-motion: reduce) {
     body.is-desktop .dock-tile.is-flash .sheet { animation: none; }
 }
+
+/* =============================================
+   MUDANZA A app.bainas.app
+   ============================================= */
+.moved-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px 10px 14px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    background: rgba(var(--accent-rgb), 0.07);
+}
+
+.moved-banner-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-2);
+}
+
+.moved-banner-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.moved-banner .chip-btn {
+    margin-top: 4px;
+}
+
+.moved-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+.moved-text strong {
+    color: var(--text);
+}
+
+.moved-warn {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(var(--accent-rgb), 0.08);
+    color: var(--text);
+}
+
+/* Enlace con aspecto de botón ("Ir a la nueva") */
+a.btn-primary {
+    flex: 1;
+    text-decoration: none;
+    text-align: center;
+}
