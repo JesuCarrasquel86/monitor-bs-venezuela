@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Bainas · Tasa BCV, dólar, euro y USDT hoy en Venezuela</title>
-    <meta name="description" content="¿A cómo está el dólar hoy? Consulta la tasa BCV, el euro y el USDT de Binance P2P en Venezuela, con calculadora en bolívares. Gratis, sin registro y sin anuncios.">
+    <title>Bainas App: dólar BCV, euro y USDT hoy en Venezuela</title>
+    <meta name="description" content="Bainas es la app gratis para saber a cómo está el dólar hoy en Venezuela: tasa BCV, euro y USDT de Binance P2P, con calculadora en bolívares. Sin registro y sin anuncios.">
     <link rel="canonical" href="https://bainas.app/">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="theme-color" content="#0a0b0d">
@@ -36,15 +36,39 @@
           "@type": "Organization",
           "@id": "https://bainas.app/#org",
           "name": "Bainas",
+          "alternateName": [
+            "bainas$",
+            "Bainas App"
+          ],
           "url": "https://bainas.app/",
-          "logo": "https://bainas.app/icons/icon-512.png",
-          "email": "j.e.carrasquel86@gmail.com"
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://bainas.app/icons/icon-512.png",
+            "width": 512,
+            "height": 512
+          },
+          "description": "Bainas es una app venezolana gratuita para ver la tasa del dólar BCV, el euro y el USDT de Binance P2P, con calculadora en bolívares.",
+          "slogan": "La tasa, sin drama.",
+          "areaServed": {
+            "@type": "Country",
+            "name": "Venezuela"
+          },
+          "email": "j.e.carrasquel86@gmail.com",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "email": "j.e.carrasquel86@gmail.com",
+            "availableLanguage": "es"
+          }
         },
         {
           "@type": "WebSite",
           "@id": "https://bainas.app/#web",
           "name": "Bainas",
-          "alternateName": "bainas$",
+          "alternateName": [
+            "bainas$",
+            "Bainas App"
+          ],
           "url": "https://bainas.app/",
           "inLanguage": "es-VE",
           "publisher": {
@@ -52,15 +76,47 @@
           }
         },
         {
+          "@type": "WebPage",
+          "@id": "https://bainas.app/#page",
+          "url": "https://bainas.app/",
+          "name": "Bainas App: dólar BCV, euro y USDT hoy en Venezuela",
+          "inLanguage": "es-VE",
+          "isPartOf": {
+            "@id": "https://bainas.app/#web"
+          },
+          "about": {
+            "@id": "https://bainas.app/#app"
+          },
+          "mainEntity": {
+            "@id": "https://bainas.app/#app"
+          },
+          "primaryImageOfPage": "https://bainas.app/og-image.jpg"
+        },
+        {
           "@type": "WebApplication",
+          "@id": "https://bainas.app/#app",
           "name": "Bainas",
+          "alternateName": [
+            "bainas$",
+            "Bainas App"
+          ],
           "url": "https://app.bainas.app/",
           "applicationCategory": "FinanceApplication",
           "operatingSystem": "Web, Android, iOS",
           "browserRequirements": "Requiere JavaScript",
           "inLanguage": "es-VE",
           "description": "Monitor de la tasa BCV, el euro y el USDT de Binance P2P en Venezuela, con calculadora en bolívares.",
+          "featureList": [
+            "Tasa BCV del dólar y el euro",
+            "Precio del USDT en Binance P2P",
+            "Brecha entre la tasa oficial y el mercado",
+            "Calculadora en bolívares y divisas",
+            "Perfiles de Pago Móvil",
+            "Alertas de brecha",
+            "Historial y exportación a Excel"
+          ],
           "image": "https://bainas.app/og-image.jpg",
+          "isAccessibleForFree": true,
           "offers": {
             "@type": "Offer",
             "price": "0",
@@ -69,6 +125,61 @@
           "publisher": {
             "@id": "https://bainas.app/#org"
           }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://bainas.app/#faq",
+          "inLanguage": "es-VE",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "¿Qué es Bainas?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Bainas (bainas$) es una app gratuita hecha en Venezuela para consultar a cómo está el dólar hoy: la tasa oficial del BCV para el dólar y el euro, el precio del USDT en Binance P2P y la brecha entre ambos. Incluye una calculadora en bolívares, perfiles de Pago Móvil y alertas. Se usa desde el navegador en app.bainas.app y se puede instalar en el teléfono."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "¿Por qué se llama Bainas?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Viene de “vaina”, la palabra venezolana para cualquier cosa (“pásame esa vaina”), escrita como se pronuncia. Y la vaina que todos preguntamos cada día es a cómo está el dólar; por eso el logo termina en $. Cuando alguien busca “Bainas” con B, esta es la app."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "¿Bainas es lo mismo que Binance o “Binans”?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. Bainas es una app independiente y no está afiliada a Binance. Solo muestra el precio público del USDT en Binance P2P como referencia, junto con la tasa del BCV. Si buscabas “binans” para ver el precio del USDT en bolívares, en Bainas lo ves sin abrir una cuenta."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "¿De dónde salen las tasas?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "El dólar y el euro oficiales son los que publica el Banco Central de Venezuela (BCV). El USDT sale de los anuncios públicos de compra y venta en Binance P2P. Las tasas son referenciales y no constituyen asesoría financiera."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "¿Bainas es gratis? ¿Necesito registrarme?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Es gratis, no pide registro ni cuenta y no tiene publicidad. Tus datos, como los perfiles de Pago Móvil, se guardan solo en tu teléfono."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "¿Cómo instalo Bainas en mi teléfono?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Abre app.bainas.app en Chrome o Safari y elige “Instalar app” o “Agregar a pantalla de inicio”. Queda como una app más, sin ocupar casi espacio, y muestra las últimas tasas guardadas aunque te quedes sin señal."
+              }
+            }
+          ]
         }
       ]
     }
@@ -211,6 +322,13 @@
         .h2 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; font-weight: 900; letter-spacing: -0.03em; }
         .sec-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; max-width: 680px; }
         .sec-head p { font-size: 18px; line-height: 1.55; color: var(--text-2); }
+        .faq { display: flex; flex-direction: column; gap: 12px; max-width: 820px; }
+        .faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+        .faq summary { cursor: pointer; list-style: none; padding: 18px 20px; font-size: 18px; font-weight: 800; display: flex; justify-content: space-between; gap: 16px; }
+        .faq summary::-webkit-details-marker { display: none; }
+        .faq summary::after { content: "+"; color: var(--accent); font-weight: 900; }
+        .faq details[open] summary::after { content: "\2212"; }
+        .faq details p { padding: 0 20px 18px; font-size: 16px; line-height: 1.6; color: var(--text-2); }
 
         /* Entradas cortas con rebote; el retraso escalonado lo pone el script */
         .js .reveal { opacity: 0; transform: translateY(20px) scale(.96); transition: opacity .35s ease-out, transform .5s cubic-bezier(.34, 1.56, .64, 1); }
@@ -355,7 +473,7 @@
         <div class="hero-copy">
             <div class="pill rise"><span class="dot"></span>Hecha en Venezuela, para Venezuela</div>
             <h1 class="rise">¿A cómo está el <span class="accent">bainas$</span> hoy?</h1>
-            <p class="lead rise">La tasa del BCV, el euro y el USDT en un vistazo, con calculadora para sacar la cuenta en bolívares. La tasa, sin drama.</p>
+            <p class="lead rise"><strong>Bainas</strong> es la app para ver la tasa del BCV, el euro y el USDT en un vistazo, con calculadora para sacar la cuenta en bolívares. La tasa, sin drama.</p>
             <div class="ctas rise">
                 <span class="store">
                     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5v17l14-8.5z" fill="#0a0b0d"></path></svg>
@@ -538,6 +656,41 @@
     </div>
 </section>
 
+<section class="section" id="preguntas" style="padding-top: 0">
+    <div class="wrap">
+        <div class="sec-head reveal">
+            <span class="eyebrow">Preguntas frecuentes</span>
+            <h2 class="h2">Lo que te preguntas de Bainas</h2>
+        </div>
+        <div class="faq reveal">
+            <details>
+                <summary>¿Qué es Bainas?</summary>
+                <p>Bainas (bainas$) es una app gratuita hecha en Venezuela para consultar a cómo está el dólar hoy: la tasa oficial del BCV para el dólar y el euro, el precio del USDT en Binance P2P y la brecha entre ambos. Incluye una calculadora en bolívares, perfiles de Pago Móvil y alertas. Se usa desde el navegador en app.bainas.app y se puede instalar en el teléfono.</p>
+            </details>
+            <details>
+                <summary>¿Por qué se llama Bainas?</summary>
+                <p>Viene de “vaina”, la palabra venezolana para cualquier cosa (“pásame esa vaina”), escrita como se pronuncia. Y la vaina que todos preguntamos cada día es a cómo está el dólar; por eso el logo termina en $. Cuando alguien busca “Bainas” con B, esta es la app.</p>
+            </details>
+            <details>
+                <summary>¿Bainas es lo mismo que Binance o “Binans”?</summary>
+                <p>No. Bainas es una app independiente y no está afiliada a Binance. Solo muestra el precio público del USDT en Binance P2P como referencia, junto con la tasa del BCV. Si buscabas “binans” para ver el precio del USDT en bolívares, en Bainas lo ves sin abrir una cuenta.</p>
+            </details>
+            <details>
+                <summary>¿De dónde salen las tasas?</summary>
+                <p>El dólar y el euro oficiales son los que publica el Banco Central de Venezuela (BCV). El USDT sale de los anuncios públicos de compra y venta en Binance P2P. Las tasas son referenciales y no constituyen asesoría financiera.</p>
+            </details>
+            <details>
+                <summary>¿Bainas es gratis? ¿Necesito registrarme?</summary>
+                <p>Es gratis, no pide registro ni cuenta y no tiene publicidad. Tus datos, como los perfiles de Pago Móvil, se guardan solo en tu teléfono.</p>
+            </details>
+            <details>
+                <summary>¿Cómo instalo Bainas en mi teléfono?</summary>
+                <p>Abre app.bainas.app en Chrome o Safari y elige “Instalar app” o “Agregar a pantalla de inicio”. Queda como una app más, sin ocupar casi espacio, y muestra las últimas tasas guardadas aunque te quedes sin señal.</p>
+            </details>
+        </div>
+    </div>
+</section>
+
 <section class="section" id="descarga">
     <div class="wrap">
         <div class="cta reveal">
@@ -556,6 +709,7 @@
         <div class="foot-row">
             <span class="word" style="font-size: 18px">bainas<span class="accent">$</span> <span style="font-weight: 500; font-size: 14px; color: var(--text-2); letter-spacing: 0">La tasa, sin drama.</span></span>
             <nav aria-label="Legal">
+                <a href="#preguntas">Preguntas</a>
                 <a href="/privacidad">Privacidad</a>
                 <a href="mailto:j.e.carrasquel86@gmail.com">Contacto</a>
             </nav>
